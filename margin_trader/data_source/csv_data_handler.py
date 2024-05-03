@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from margin_trader.strategy import DataHandler
+from margin_trader.data_source.data_handler import DataHandler
 from margin_trader.event import MarketEvent
 
 class HistoricCSVDataHandler(DataHandler):

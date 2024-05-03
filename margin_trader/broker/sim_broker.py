@@ -1,31 +1,36 @@
-import datetime
 import pandas as pd
-from base import ExecutionHandler
+from queue import Queue
+from margin_trader.broker import Broker
+from margin_trader.data_source import DataHandler
 from event import FillEvent, OrderEvent
 from margin_trader.performance import create_sharpe_ratio, create_drawdowns
 
-class SimulatedExecutionHandler(ExecutionHandler):
+class SimulatedBroker(Broker):
     """
-    The simulated execution handler simply converts all order
-    objects into their equivalent fill objects automatically
-    without latency, slippage or fill-ratio issues.
-
-    This allows a straightforward "first go" test of any strategy,
-    before implementation with a more sophisticated execution
-    handler.
+    Simulate live trading on a broker account.
+    
+    State:
+        - Convert all order objects into their equivalent fill objects automatically
+            without latency, slippage or fill-ratio issues.
+        - Can only handle market order events
+        - Execute all orders at close price
     """
     
-    def __init__(self, events):
-        """
-        Initialises the handler, setting the event queues
-        up internally.
-
-        Parameters:
-        events - The Queue of Event objects.
-        """
+    def __init__(
+            self,
+            balance: int|float,
+            data_source: DataHandler,
+            events: Queue,
+            leverage: int = 1
+        ):
+        self.balance = balance
+        self.equity = balance
+        self.free_margin = balance
+        self.bar = data_source
         self.events = events
+        self.portfolio = PostitionManager()
 
-    def execute_order(self, event):
+    def execute_order(self, event: OrderEvent):
         """
         Simply converts Order objects into Fill objects naively,
         i.e. without any latency, slippage or fill ratio problems.
@@ -34,96 +39,35 @@ class SimulatedExecutionHandler(ExecutionHandler):
         event - Contains an Event object with order information.
         """
         if event.type == 'ORDER':
-            fill_event = FillEvent(datetime.datetime.utcnow(), event.symbol,
-                                   'ARCA', event.quantity, event.direction, None)
+            fill_event = FillEvent(self.bar.current_datetime, event.symbol,
+                                   event.quantity, event.direction,
+                                   self.bar.get_latest_close_price(event.symbol))
             self.events.put(fill_event)
-
-class PostitionManager:
-    """
-    The NaivePortfolio object is designed to send orders to
-    a brokerage object with a constant quantity size blindly,
-    i.e. without any risk management or position sizing. It is
-    used to test simpler strategies such as BuyAndHoldStrategy.
-    """
     
-    def __init__(self, bars, events, start_date, initial_capital=100000.0):
-        """
-        Initialises the portfolio with bars and an event queue. 
-        Also includes a starting datetime index and initial capital 
-        (USD unless otherwise stated).
+    def buy(self, symbol: str, order_type: str = "MKT", units: int|float = 100):
+        """Buy x units of symbol."""
+        self.create_order(symbol, order_type, "BUY", units)
 
-        Parameters:
-        bars - The DataHandler object with current market data.
-        events - The Event Queue object.
-        start_date - The start date (bar) of the portfolio.
-        initial_capital - The starting capital in USD.
-        """
-        self.bars = bars
-        self.events = events
-        self.symbol_list = self.bars.symbol_list
-        self.start_date = start_date
-        self.initial_capital = initial_capital
-        
-        # self.all_positions = self.construct_all_positions()
-        # self.current_positions = {symbol: 0 for symbol in sestraderlf.symbol_list}
+    def sell(self, symbol: str, order_type: str = "MKT", units: int|float = 100):
+        """Sell x units of symbol."""
+        self.create_order(symbol, order_type, "SELL", units)
 
-        # self.all_holdings = self.construct_all_holdings()
-        # self.current_holdings = self.construct_current_holdings()
+    def close(self, symbol: str, units: int|float = 100):
+        """Close an existion position with an opposing order"""
+        position = self.portfolio.positions.get(symbol, False)
+        if position:
+            side = position.side
+            if side == "BUY":
+                self.create_order(symbol, "MKT", "SELL", units)
+            else:
+                self.create_order(symbol, "MKT", "BUY", units)
 
-        self.positions = {}
-        self.postion_history = []
-
-    def update_timeindex(self, event):
-        """
-        Adds a new record to the positions matrix for the current 
-        market data bar. This reflects the PREVIOUS bar, i.e. all
-        current market data at this stage is known (OLHCVI).
-
-        Makes use of a MarketEvent from the events queue.
-        """
-        current_datetime = self.bars.current_datetime
-
-        # Update positions
-        positions = {symbol: self.current_positions[symbol] for symbol in self.symbol_list}
-        positions['datetime'] = current_datetime
-
-        # Append the current positions
-        self.all_positions.append(positions)
-
-        # Update holdings
-        holdings = {symbol: 0.0 for symbol in self.symbol_list}
-        holdings["datetime"] = current_datetime
-        holdings["cash"] = self.current_holdings["cash"]
-        holdings["commission"] = self.current_holdings["commission"]
-        holdings["total"] = self.current_holdings["cash"]
-
-        for symbol in self.symbol_list:
-            # Approximation to the real value
-            close_price = self.bars.get_latest_close_price(symbol)
-            market_value = self.current_positions[symbol] * close_price
-            holdings[symbol] = market_value
-            holdings['total'] += market_value
-
-        # Append the current holdings
-        self.all_holdings.append(holdings)
-
-    def update_positions_from_fill(self, fill):
-        """
-        Takes a FilltEvent object and updates the position matrix
-        to reflect the new position.
-
-        Parameters:
-        fill - The FillEvent object to update the positions with.
-        """
-        if fill.symbol not in self.positions:
-            self.positions[fill.symbol] = Position(
-                datetime=fill.timeindex,
-                symbol=fill.symbol,
-                quantity=fill.quantity,
-                fill_price=fill.fill_cost,
-                commission=fill.commission,
-                side=fill.direction
-            )
+    def create_order(self, symbol: str, order_type: str,
+                    side: str, units: int|float = 100):
+        """Create an order event"""
+        order = OrderEvent(symbol, order_type=order_type,
+                           quantity=units, direction=side)
+        self.events.put(order)
 
     def update_account_from_fill(self, fill):
         """
@@ -141,51 +85,34 @@ class PostitionManager:
 
         # TODO: Add account update logic
 
-    def update_fill(self, event):
-        """
-        Updates the portfolio current positions and holdings 
-        from a FillEvent.
-        """
-        if event.type == 'FILL':
-            self.update_positions_from_fill(event)
-            # self.update_holdings_from_fill(event)
-
-    def generate_naive_order(self, signal, order_type = "MKT"):
-        """
-        Simply transacts an OrderEvent object as a constant quantity
-        sizing of the signal object, without risk management or
-        position sizing considerations.
-
-        Parameters:
-        signal - The SignalEvent signal information.
-        """
-        order = None
-
-        symbol = signal.symbol
-        direction = signal.signal_type
-
-        mkt_quantity = 100
-        cur_quantity = self.current_positions[symbol]
-
-        if direction == 'LONG' and cur_quantity == 0:
-            order = OrderEvent(symbol, order_type, mkt_quantity, 'BUY')
-        if direction == 'SHORT' and cur_quantity == 0:
-            order = OrderEvent(symbol, order_type, mkt_quantity, 'SELL')   
+class PostitionManager:
+    """Open and close positions based on filled orders."""
     
-        if direction == 'EXIT' and cur_quantity > 0:
-            order = OrderEvent(symbol, order_type, abs(cur_quantity), 'SELL')
-        if direction == 'EXIT' and cur_quantity < 0:
-            order = OrderEvent(symbol, order_type, abs(cur_quantity), 'BUY')
-        return order
-    
-    def update_signal(self, event):
-        """
-        Acts on a SignalEvent to generate new orders 
-        based on the portfolio logic.
-        """
-        if event.type == 'SIGNAL':
-            order_event = self.generate_naive_order(event)
-            self.events.put(order_event)
+    def __init__(self):
+        self.positions = {}
+        self.postion_history = []
+
+    def update_position(self):
+        """Update position last price and PnL when from market event"""
+        pass
+
+    def update_position_from_fill(self, event: FillEvent):
+        """Add a position for recently filled order."""
+        symbol = event.symbol
+        if event.symbol not in self.positions:
+            self.positions[symbol] = Position(
+                datetime=event.timeindex,
+                symbol=event.symbol,
+                quantity=event.quantity,
+                fill_price=event.fill_price,
+                commission=event.commission,
+                side=event.direction
+            )
+        else:
+            self.positions[symbol].update(event.fill_price)
+            self.positions[symbol].close_time = event.time_index
+            self.postion_history.append(self.positions[symbol])
+            del self.positions[event.symbol]
     
     def create_equity_curve_dataframe(self):
         """
@@ -218,8 +145,6 @@ class PostitionManager:
 
 
 class Position:
-    """Manage open and closed positions"""
-
     def __init__(self, datetime, symbol, quantity, fill_price, commission, side):
         self.symbol = symbol
         self.quantity = quantity
@@ -228,11 +153,20 @@ class Position:
         self.commission = commission
         self.side = side
         self.fill_time = datetime
-        self.pnl = 0
+        self.pnl = self.update_pnl()
 
     def update_pnl(self):
         self.pnl = (self.last_price - self.fill_price) * self.quantity
+        if self.side == "SELL":
+            self.pnl = -1 * self.pnl
+
+    def update_last_price(self, price: float):
+        self.last_price = price
+
+    def update(self, price: float):
+        self.update_last_price(price)
+        self.update_pnl()
 
     def __repr__(self):
-        position = f"{self.side} | {self.quantity} | {self.last_price} | {self.value}"
+        position = f"{self.side} | {self.quantity} | {self.last_price} | {self.pnl}"
         return position

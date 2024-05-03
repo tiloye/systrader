@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from queue import Queue
-from margin_trader.data_source.data_handler import HistoricCSVDataHandler
+from margin_trader.data_source.csv_data_handler import HistoricCSVDataHandler
 from margin_trader.broker import NaivePortfolio
 
 event_queue = Queue()

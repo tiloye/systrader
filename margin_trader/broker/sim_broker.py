@@ -1,4 +1,5 @@
 import pandas as pd
+from datetime import datetime
 from queue import Queue
 from margin_trader.broker import Broker
 from margin_trader.data_source import DataHandler
@@ -19,16 +20,17 @@ class SimulatedBroker(Broker):
     def __init__(
             self,
             balance: int|float,
-            data_source: DataHandler,
+            data_handler: DataHandler,
             events: Queue,
             leverage: int = 1
         ):
         self.balance = balance
         self.equity = balance
         self.free_margin = balance
-        self.bar = data_source
+        self.data_handler = data_handler
         self.events = events
         self.portfolio = PostitionManager()
+        self._total_trades = 0
 
     def execute_order(self, event: OrderEvent):
         """
@@ -69,35 +71,62 @@ class SimulatedBroker(Broker):
                            quantity=units, direction=side)
         self.events.put(order)
 
-    def update_account_from_fill(self, fill):
-        """
-        Takes a FillEvent object and updates the account balance
+    def update_porfolio_from_price(self):
+        """Update portfolio holdings with the latest market price"""
+        price = self.get_last_prices()
+        for symbol in self.portfolio.positions:
+            self.portfolio.update_pnl(symbol, price[symbol])
 
-        Parameters:
-        fill - The FillEvent object to update the holdings with.
-        """
-        # Check whether the fill is a buy or sell
-        fill_dir = 0
-        if fill.direction == 'BUY':
-            fill_dir = 1
-        if fill.direction == 'SELL':
-            fill_dir = -1
+    def update_portfolio_from_fill(self, event: FillEvent):
+        """Add new positions to the porfolio"""
+        self.portfolio.update_position_from_fill(event)
 
-        # TODO: Add account update logic
+    def update_account_from_fill(self, event: FillEvent):
+        self.update_portfolio_from_fill(event)
+        self.update_balance()
+            
+    def update_balance(self):
+        # Check if a position has been closed
+        if self._check_new_trade():
+            self.balance += self.portfolio.history[-1].pnl
+            # Gain or loss of cash implies trade
+            self._total_trades = len(self.portfolio.history)
+
+    def update_equity(self):
+        total_pnl = self.portfolio.get_totat_pnl()
+        self.equity += total_pnl
+
+    def update_margin(self):
+        pass
+            
+    def get_last_price(self):
+        price = {
+            symbol: self.data_handler.get_latest_close_price(symbol)
+            for symbol in self.portfolio.positions
+        }
+        return price
+    
+    def _check_new_trade(self):
+        """Check if a closed position has been added to the position history."""
+        if len(self.portfolio.history) > self._total_trades:
+            return True
+        return False
+
+
 
 class PostitionManager:
     """Open and close positions based on filled orders."""
     
     def __init__(self):
         self.positions = {}
-        self.postion_history = []
+        self.history = []
 
-    def update_position(self):
-        """Update position last price and PnL when from market event"""
-        pass
+    def update_pnl(self, symbol: str, price: float):
+        """Update position PnL when from market event"""
+        self.positions[symbol].update(price)
 
     def update_position_from_fill(self, event: FillEvent):
-        """Add a position for recently filled order."""
+        """Add/remove a position for recently filled order."""
         symbol = event.symbol
         if event.symbol not in self.positions:
             self.positions[symbol] = Position(
@@ -110,9 +139,13 @@ class PostitionManager:
             )
         else:
             self.positions[symbol].update(event.fill_price)
-            self.positions[symbol].close_time = event.time_index
-            self.postion_history.append(self.positions[symbol])
+            self.positions[symbol].update_close_time = event.time_index
+            self.history.append(self.positions[symbol])
             del self.positions[event.symbol]
+
+    def get_totat_pnl(self):
+        total_pnl = sum(self.postions[symbol].pnl for symbol in self.positions)
+        return total_pnl
     
     def create_equity_curve_dataframe(self):
         """
@@ -145,18 +178,26 @@ class PostitionManager:
 
 
 class Position:
-    def __init__(self, datetime, symbol, quantity, fill_price, commission, side):
+    def __init__(
+            self,
+            timeindex: str|datetime,
+            symbol: str,
+            units: int|float,
+            fill_price: float,
+            commission: float|None,
+            side
+        ):
         self.symbol = symbol
-        self.quantity = quantity
+        self.units = units
         self.fill_price = fill_price
         self.last_price = fill_price
         self.commission = commission
         self.side = side
-        self.fill_time = datetime
-        self.pnl = self.update_pnl()
+        self.fill_time = timeindex
+        self.pnl = 0
 
     def update_pnl(self):
-        self.pnl = (self.last_price - self.fill_price) * self.quantity
+        self.pnl = (self.last_price - self.fill_price) * self.units
         if self.side == "SELL":
             self.pnl = -1 * self.pnl
 
@@ -166,6 +207,9 @@ class Position:
     def update(self, price: float):
         self.update_last_price(price)
         self.update_pnl()
+    
+    def update_close_time(self, timeindex: str|datetime):
+        self.close_time = timeindex
 
     def __repr__(self):
         position = f"{self.side} | {self.quantity} | {self.last_price} | {self.pnl}"

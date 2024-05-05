@@ -29,6 +29,7 @@ class SimulatedBroker(Broker):
         self.free_margin = balance
         self.data_handler = data_handler
         self.events = events
+        self.leverage = leverage
         self.portfolio = PostitionManager()
         self._total_trades = 0
 
@@ -41,7 +42,7 @@ class SimulatedBroker(Broker):
         event - Contains an Event object with order information.
         """
         if event.type == 'ORDER':
-            fill_event = FillEvent(self.bar.current_datetime, event.symbol,
+            fill_event = FillEvent(self.data_handler.current_datetime, event.symbol,
                                    event.quantity, event.direction,
                                    self.bar.get_latest_close_price(event.symbol))
             self.events.put(fill_event)
@@ -84,6 +85,10 @@ class SimulatedBroker(Broker):
     def update_account_from_fill(self, event: FillEvent):
         self.update_portfolio_from_fill(event)
         self.update_balance()
+
+    def update_account_from_market(self):
+        self.update_equity()
+        self.update_free_margin()
             
     def update_balance(self):
         # Check if a position has been closed
@@ -96,8 +101,8 @@ class SimulatedBroker(Broker):
         total_pnl = self.portfolio.get_totat_pnl()
         self.equity += total_pnl
 
-    def update_margin(self):
-        pass
+    def update_free_margin(self):
+        self.free_margin = self.equity - self.get_used_margin()
             
     def get_last_price(self):
         price = {
@@ -105,6 +110,12 @@ class SimulatedBroker(Broker):
             for symbol in self.portfolio.positions
         }
         return price
+    
+    def get_used_margin(self):
+        symbols = self.portfolio.positions.keys()
+        margin = sum(self.portfolio.positions[symbol].get_cost() for symbol in symbols)
+        margin = margin/self.leverage
+        return margin
     
     def _check_new_trade(self):
         """Check if a closed position has been added to the position history."""
@@ -193,7 +204,8 @@ class Position:
         self.last_price = fill_price
         self.commission = commission
         self.side = side
-        self.fill_time = timeindex
+        self.open_time = timeindex
+        self._cost = self.fill_price * self.units
         self.pnl = 0
 
     def update_pnl(self):
@@ -210,6 +222,9 @@ class Position:
     
     def update_close_time(self, timeindex: str|datetime):
         self.close_time = timeindex
+
+    def get_cost(self):
+        return self._cost
 
     def __repr__(self):
         position = f"{self.side} | {self.quantity} | {self.last_price} | {self.pnl}"

@@ -3,7 +3,7 @@ from datetime import datetime
 from queue import Queue
 from margin_trader.broker import Broker
 from margin_trader.data_source import DataHandler
-from event import FillEvent, OrderEvent
+from margin_trader.event import FillEvent, OrderEvent
 from margin_trader.performance import create_sharpe_ratio, create_drawdowns
 
 class SimulatedBroker(Broker):
@@ -139,7 +139,7 @@ class PostitionManager:
     def update_position_from_fill(self, event: FillEvent):
         """Add/remove a position for recently filled order."""
         symbol = event.symbol
-        if event.symbol not in self.positions:
+        if event.symbol not in self.positions: # Position does not exist. Open a trade
             self.positions[symbol] = Position(
                 datetime=event.timeindex,
                 symbol=event.symbol,
@@ -148,7 +148,9 @@ class PostitionManager:
                 commission=event.commission,
                 side=event.direction
             )
-        else:
+        else: # Position already exists. Close the trade
+            # Update commission for roundtrip trades
+            self.positions[symbol].commission += event.commission
             self.positions[symbol].update(event.fill_price)
             self.positions[symbol].update_close_time = event.time_index
             self.history.append(self.positions[symbol])
@@ -209,9 +211,11 @@ class Position:
         self.pnl = 0
 
     def update_pnl(self):
-        self.pnl = (self.last_price - self.fill_price) * self.units
-        if self.side == "SELL":
-            self.pnl = -1 * self.pnl
+        pnl = (self.last_price - self.fill_price) * self.units
+        if self.side == "BUY":
+            self.pnl = pnl - self.commission
+        else:
+            self.pnl = -1 * pnl - self.commission
 
     def update_last_price(self, price: float):
         self.last_price = price
@@ -227,5 +231,6 @@ class Position:
         return self._cost
 
     def __repr__(self):
-        position = f"{self.side} | {self.quantity} | {self.last_price} | {self.pnl}"
+        position = f"{self.symbol}|{self.side}|{self.units}|{self.pnl}"
         return position
+    

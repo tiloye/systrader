@@ -30,7 +30,7 @@ class SimulatedBroker(Broker):
         self.data_handler = data_handler
         self.events = events
         self.leverage = leverage
-        self.portfolio = PostitionManager()
+        self.portfolio = PositionManager()
         self._total_trades = 0
 
     def execute_order(self, event: OrderEvent):
@@ -125,7 +125,7 @@ class SimulatedBroker(Broker):
 
 
 
-class PostitionManager:
+class PositionManager:
     """Open and close positions based on filled orders."""
     
     def __init__(self):
@@ -140,29 +140,29 @@ class PostitionManager:
         """Add/remove a position for recently filled order."""
 
         if event.symbol not in self.positions: # Position does not exist. Open a trade
-            self.open_position(event)
+            self.__open_position(event)
         else: # Position already exists. Close the trade
-            self.close_position(event)
+            self.__close_position(event)
             
-    def open_position(self, event: FillEvent):
+    def __open_position(self, event: FillEvent) -> None:
         self.positions[event.symbol] = Position(
-                datetime=event.timeindex,
+                timeindex=event.timeindex,
                 symbol=event.symbol,
-                quantity=event.quantity,
+                units=event.units,
                 fill_price=event.fill_price,
                 commission=event.commission,
-                side=event.direction
+                side=event.side
         )
         
-    def close_position(self, event: FillEvent):
+    def __close_position(self, event: FillEvent) -> None:
         self.positions[event.symbol].commission += event.commission # openNclose fee
         self.positions[event.symbol].update(event.fill_price)
-        self.positions[event.symbol].update_close_time(event.time_index)
+        self.positions[event.symbol].update_close_time(event.timeindex)
         self.history.append(self.positions[event.symbol])
         del self.positions[event.symbol]
 
-    def get_totat_pnl(self):
-        total_pnl = sum(self.postions[symbol].pnl for symbol in self.positions)
+    def get_total_pnl(self) -> int:
+        total_pnl = sum(self.positions[symbol].pnl for symbol in self.positions)
         return total_pnl
     
 
@@ -174,7 +174,7 @@ class Position:
             units: int|float,
             fill_price: float,
             commission: float|None,
-            side
+            side: str
         ):
         self.symbol = symbol
         self.units = units

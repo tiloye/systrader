@@ -138,57 +138,33 @@ class PostitionManager:
 
     def update_position_from_fill(self, event: FillEvent):
         """Add/remove a position for recently filled order."""
-        symbol = event.symbol
+
         if event.symbol not in self.positions: # Position does not exist. Open a trade
-            self.positions[symbol] = Position(
+            self.open_position(event)
+        else: # Position already exists. Close the trade
+            self.close_position(event)
+            
+    def open_position(self, event: FillEvent):
+        self.positions[event.symbol] = Position(
                 datetime=event.timeindex,
                 symbol=event.symbol,
                 quantity=event.quantity,
                 fill_price=event.fill_price,
                 commission=event.commission,
                 side=event.direction
-            )
-        else: # Position already exists. Close the trade
-            # Update commission for roundtrip trades
-            self.positions[symbol].commission += event.commission
-            self.positions[symbol].update(event.fill_price)
-            self.positions[symbol].update_close_time = event.time_index
-            self.history.append(self.positions[symbol])
-            del self.positions[event.symbol]
+        )
+        
+    def close_position(self, event: FillEvent):
+        self.positions[event.symbol].commission += event.commission # openNclose fee
+        self.positions[event.symbol].update(event.fill_price)
+        self.positions[event.symbol].update_close_time(event.time_index)
+        self.history.append(self.positions[event.symbol])
+        del self.positions[event.symbol]
 
     def get_totat_pnl(self):
         total_pnl = sum(self.postions[symbol].pnl for symbol in self.positions)
         return total_pnl
     
-    def create_equity_curve_dataframe(self):
-        """
-        Creates a pandas DataFrame from the all_holdings
-        list of dictionaries.
-        """
-        curve = pd.DataFrame(self.all_holdings)
-        curve.set_index('datetime', inplace=True)
-        curve['returns'] = curve['total'].pct_change()
-        curve['equity_curve'] = (1.0+curve['returns']).cumprod()
-        self.equity_curve = curve
-    
-    def output_summary_stats(self):
-        """
-        Creates a list of summary statistics for the portfolio such
-        as Sharpe Ratio and drawdown information.
-        """
-        total_return = self.equity_curve['equity_curve'][-1]
-        returns = self.equity_curve['returns']
-        pnl = self.equity_curve['equity_curve']
-
-        sharpe_ratio = create_sharpe_ratio(returns)
-        max_dd, dd_duration = create_drawdowns(pnl)
-
-        stats = [("Total Return", "%0.2f%%" % ((total_return - 1.0) * 100.0)),
-                ("Sharpe Ratio", "%0.2f" % sharpe_ratio),
-                ("Max Drawdown", "%0.2f%%" % (max_dd * 100.0)),
-                ("Drawdown Duration", "%d" % dd_duration)]
-        return stats
-
 
 class Position:
     def __init__(
@@ -207,8 +183,8 @@ class Position:
         self.commission = commission
         self.side = side
         self.open_time = timeindex
-        self._cost = self.fill_price * self.units
         self.pnl = 0
+        self.__cost = self.fill_price * self.units
 
     def update_pnl(self):
         pnl = (self.last_price - self.fill_price) * self.units
@@ -228,7 +204,7 @@ class Position:
         self.close_time = timeindex
 
     def get_cost(self):
-        return self._cost
+        return self.__cost
 
     def __repr__(self):
         position = f"{self.symbol}|{self.side}|{self.units}|{self.pnl}"

@@ -30,10 +30,10 @@ class SimulatedBroker(Broker):
         self.data_handler = data_handler
         self.events = events
         self.leverage = leverage
-        self.portfolio = PositionManager()
+        self.p_manager = PositionManager()
         self._total_trades = 0
 
-    def execute_order(self, event: OrderEvent):
+    def execute_order(self, event: OrderEvent) -> None:
         """
         Simply converts Order objects into Fill objects naively,
         i.e. without any latency, slippage or fill ratio problems.
@@ -47,79 +47,81 @@ class SimulatedBroker(Broker):
                                    self.bar.get_latest_close_price(event.symbol))
             self.events.put(fill_event)
     
-    def buy(self, symbol: str, order_type: str = "MKT", units: int|float = 100):
+    def buy(self, symbol: str,
+            order_type: str = "MKT", units: int|float = 100) -> None:
         """Buy x units of symbol."""
         self.create_order(symbol, order_type, "BUY", units)
 
-    def sell(self, symbol: str, order_type: str = "MKT", units: int|float = 100):
+    def sell(self, symbol: str,
+             order_type: str = "MKT", units: int|float = 100) -> None:
         """Sell x units of symbol."""
         self.create_order(symbol, order_type, "SELL", units)
 
-    def close(self, symbol: str, units: int|float = 100):
+    def close(self, symbol: str, units: int|float = 100) -> None:
         """Close an existion position with an opposing order"""
-        position = self.portfolio.positions.get(symbol, False)
+        position = self.p_manager.positions.get(symbol, False)
         if position:
             side = position.side
             if side == "BUY":
-                self.create_order(symbol, "MKT", "SELL", units)
+                self.sell(symbol, units)
             else:
-                self.create_order(symbol, "MKT", "BUY", units)
+                self.buy(symbol, units)
 
     def create_order(self, symbol: str, order_type: str,
-                    side: str, units: int|float = 100):
+                    side: str, units: int|float = 100) -> None:
         """Create an order event"""
         order = OrderEvent(symbol, order_type=order_type,
                            quantity=units, direction=side)
         self.events.put(order)
 
-    def update_porfolio_from_price(self):
+    def update_porfolio_from_price(self) -> None:
         """Update portfolio holdings with the latest market price"""
         price = self.get_last_prices()
-        for symbol in self.portfolio.positions:
-            self.portfolio.update_pnl(symbol, price[symbol])
+        for symbol in self.p_manager.positions:
+            self.p_manager.update_pnl(symbol, price[symbol])
 
-    def update_portfolio_from_fill(self, event: FillEvent):
+    def update_portfolio_from_fill(self, event: FillEvent) -> None:
         """Add new positions to the porfolio"""
-        self.portfolio.update_position_from_fill(event)
+        self.p_manager.update_position_from_fill(event)
 
-    def update_account_from_fill(self, event: FillEvent):
+    def update_account_from_fill(self, event: FillEvent) -> None:
         self.update_portfolio_from_fill(event)
         self.update_balance()
 
-    def update_account_from_market(self):
+    def update_account_from_market(self) -> None:
         self.update_equity()
         self.update_free_margin()
             
-    def update_balance(self):
+    def update_balance(self) -> None:
         # Check if a position has been closed
         if self._check_new_trade():
-            self.balance += self.portfolio.history[-1].pnl
+            self.balance += self.p_manager.history[-1].pnl
             # Gain or loss of cash implies trade
-            self._total_trades = len(self.portfolio.history)
+            self._total_trades = len(self.p_manager.history)
 
-    def update_equity(self):
-        total_pnl = self.portfolio.get_totat_pnl()
+    def update_equity(self) -> None:
+        total_pnl = self.p_manager.get_totat_pnl()
         self.equity += total_pnl
 
-    def update_free_margin(self):
+    def update_free_margin(self) -> None:
         self.free_margin = self.equity - self.get_used_margin()
             
-    def get_last_price(self):
+    def get_last_price(self) -> float:
         price = {
             symbol: self.data_handler.get_latest_close_price(symbol)
-            for symbol in self.portfolio.positions
+            for symbol in self.p_manager.positions
         }
         return price
     
-    def get_used_margin(self):
-        symbols = self.portfolio.positions.keys()
-        margin = sum(self.portfolio.positions[symbol].get_cost() for symbol in symbols)
+    def get_used_margin(self) -> float:
+        symbols = self.p_manager.positions.keys()
+        margin = sum(self.p_manager.positions[symbol].get_cost() for symbol in symbols)
         margin = margin/self.leverage
         return margin
     
-    def _check_new_trade(self):
+    def _check_new_trade(self) -> bool:
         """Check if a closed position has been added to the position history."""
-        if len(self.portfolio.history) > self._total_trades:
+        if len(self.p_manager.history) > self._total_trades:
             return True
         return False
 
@@ -132,11 +134,11 @@ class PositionManager:
         self.positions = {}
         self.history = []
 
-    def update_pnl(self, symbol: str, price: float):
+    def update_pnl(self, symbol: str, price: float) -> None:
         """Update position PnL when from market event"""
         self.positions[symbol].update(price)
 
-    def update_position_from_fill(self, event: FillEvent):
+    def update_position_from_fill(self, event: FillEvent) -> None:
         """Add/remove a position for recently filled order."""
 
         if event.symbol not in self.positions: # Position does not exist. Open a trade
@@ -186,27 +188,27 @@ class Position:
         self.pnl = 0
         self.__cost = self.fill_price * self.units
 
-    def update_pnl(self):
+    def update_pnl(self) -> None:
         pnl = (self.last_price - self.fill_price) * self.units
         if self.side == "BUY":
             self.pnl = pnl - self.commission
         else:
             self.pnl = -1 * pnl - self.commission
 
-    def update_last_price(self, price: float):
+    def update_last_price(self, price: float) -> None:
         self.last_price = price
 
-    def update(self, price: float):
+    def update(self, price: float) -> None:
         self.update_last_price(price)
         self.update_pnl()
     
-    def update_close_time(self, timeindex: str|datetime):
+    def update_close_time(self, timeindex: str|datetime) -> None:
         self.close_time = timeindex
 
-    def get_cost(self):
+    def get_cost(self) -> float:
         return self.__cost
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         position = f"{self.symbol}|{self.side}|{self.units}|{self.pnl}"
         return position
     

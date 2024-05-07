@@ -27,6 +27,7 @@ class SimulatedBroker(Broker):
         self.balance = balance
         self.equity = balance
         self.free_margin = balance
+        self.margin = 0.0
         self.data_handler = data_handler
         self.events = events
         self.leverage = leverage
@@ -85,19 +86,19 @@ class SimulatedBroker(Broker):
         self.p_manager.update_position_from_fill(event)
 
     def update_account_from_fill(self, event: FillEvent) -> None:
+        curr_margin = self.margin
         self.update_portfolio_from_fill(event)
-        self.update_balance()
+        self.update_margin_from_fill(event)
+        self.update_balance(curr_margin)
 
     def update_account_from_market(self) -> None:
         self.update_equity()
         self.update_free_margin()
             
-    def update_balance(self) -> None:
+    def update_balance(self, prev_margin: float) -> None:
         # Check if a position has been closed
-        if self._check_new_trade():
+        if self.margin < prev_margin:
             self.balance += self.p_manager.history[-1].pnl
-            # Gain or loss of cash implies trade
-            self._total_trades = len(self.p_manager.history)
 
     def update_equity(self) -> None:
         total_pnl = self.p_manager.get_totat_pnl()
@@ -105,6 +106,14 @@ class SimulatedBroker(Broker):
 
     def update_free_margin(self) -> None:
         self.free_margin = self.equity - self.get_used_margin()
+
+    def update_margin_from_fill(self, event: FillEvent) -> None:
+        if event.symbol in self.p_manager.positions:
+            self.margin -= (self.p_manager.positions[event.symbol].get_cost()
+                            / self.leverage)
+        else:
+            self.margin += (event.units * event.fill_price) / self.leverage
+
             
     def get_last_price(self) -> float:
         price = {
@@ -118,13 +127,6 @@ class SimulatedBroker(Broker):
         margin = sum(self.p_manager.positions[symbol].get_cost() for symbol in symbols)
         margin = margin/self.leverage
         return margin
-    
-    def _check_new_trade(self) -> bool:
-        """Check if a closed position has been added to the position history."""
-        if len(self.p_manager.history) > self._total_trades:
-            return True
-        return False
-
 
 
 class PositionManager:

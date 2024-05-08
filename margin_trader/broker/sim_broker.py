@@ -6,7 +6,7 @@ from margin_trader.data_source import DataHandler
 from margin_trader.event import FillEvent, OrderEvent
 from margin_trader.performance import create_sharpe_ratio, create_drawdowns
 
-class SimulatedBroker(Broker):
+class SimBroker(Broker):
     """
     Simulate live trading on a broker account.
     
@@ -87,27 +87,27 @@ class SimulatedBroker(Broker):
 
     def update_account_from_fill(self, event: FillEvent) -> None:
         curr_margin = self.margin
-        self.update_portfolio_from_fill(event)
-        self.update_margin_from_fill(event)
-        self.update_balance(curr_margin)
+        self.__update_portfolio_from_fill(event)
+        self.__update_margin_from_fill(event)
+        self.__update_balance(curr_margin)
 
-    def update_account_from_market(self) -> None:
-        self.update_equity()
-        self.update_free_margin()
+    def update_account_from_price(self) -> None:
+        self.__update_equity()
+        self.__update_free_margin()
             
-    def update_balance(self, prev_margin: float) -> None:
+    def __update_balance(self, prev_margin: float) -> None:
         # Check if a position has been closed
         if self.margin < prev_margin:
             self.balance += self.p_manager.history[-1].pnl
 
-    def update_equity(self) -> None:
+    def __update_equity(self) -> None:
         total_pnl = self.p_manager.get_totat_pnl()
         self.equity += total_pnl
 
-    def update_free_margin(self) -> None:
+    def __update_free_margin(self) -> None:
         self.free_margin = self.equity - self.get_used_margin()
 
-    def update_margin_from_fill(self, event: FillEvent) -> None:
+    def __update_margin_from_fill(self, event: FillEvent) -> None:
         if event.symbol in self.p_manager.positions:
             self.margin -= (self.p_manager.positions[event.symbol].get_cost()
                             / self.leverage)

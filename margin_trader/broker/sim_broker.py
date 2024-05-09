@@ -22,7 +22,8 @@ class SimBroker(Broker):
             balance: int|float,
             data_handler: DataHandler,
             events: Queue,
-            leverage: int = 1
+            leverage: int = 1,
+            commission: None|int|float = None
         ):
         self.balance = balance
         self.equity = balance
@@ -31,8 +32,8 @@ class SimBroker(Broker):
         self.data_handler = data_handler
         self.events = events
         self.leverage = leverage
+        self.commission = commission
         self.p_manager = PositionManager()
-        self._total_trades = 0
 
     def execute_order(self, event: OrderEvent) -> None:
         """
@@ -43,20 +44,25 @@ class SimBroker(Broker):
         event - Contains an Event object with order information.
         """
         if event.type == 'ORDER':
-            fill_event = FillEvent(self.data_handler.current_datetime, event.symbol,
-                                   event.quantity, event.direction,
-                                   self.bar.get_latest_close_price(event.symbol))
+            fill_event = FillEvent(
+                self.data_handler.current_datetime,
+                event.symbol,
+                event.units,
+                event.side,
+                self.data_handler.get_latest_close_price(event.symbol),
+                self.commission
+            )
             self.events.put(fill_event)
     
     def buy(self, symbol: str,
             order_type: str = "MKT", units: int|float = 100) -> None:
         """Buy x units of symbol."""
-        self.create_order(symbol, order_type, "BUY", units)
+        self.__create_order(symbol, order_type, "BUY", units)
 
     def sell(self, symbol: str,
              order_type: str = "MKT", units: int|float = 100) -> None:
         """Sell x units of symbol."""
-        self.create_order(symbol, order_type, "SELL", units)
+        self.__create_order(symbol, order_type, "SELL", units)
 
     def close(self, symbol: str, units: int|float = 100) -> None:
         """Close an existion position with an opposing order"""
@@ -67,33 +73,38 @@ class SimBroker(Broker):
                 self.sell(symbol, units)
             else:
                 self.buy(symbol, units)
+        else:
+            print(f"There is no open position for {symbol}")
 
-    def create_order(self, symbol: str, order_type: str,
+    def __create_order(self, symbol: str, order_type: str,
                     side: str, units: int|float = 100) -> None:
         """Create an order event"""
         order = OrderEvent(symbol, order_type=order_type,
-                           quantity=units, direction=side)
+                           units=units, side=side)
         self.events.put(order)
-
-    def update_porfolio_from_price(self) -> None:
-        """Update portfolio holdings with the latest market price"""
-        price = self.get_last_prices()
-        for symbol in self.p_manager.positions:
-            self.p_manager.update_pnl(symbol, price[symbol])
-
-    def update_portfolio_from_fill(self, event: FillEvent) -> None:
-        """Add new positions to the porfolio"""
-        self.p_manager.update_position_from_fill(event)
 
     def update_account_from_fill(self, event: FillEvent) -> None:
         curr_margin = self.margin
-        self.__update_portfolio_from_fill(event)
+        self.__update_position_from_fill(event)
         self.__update_margin_from_fill(event)
         self.__update_balance(curr_margin)
 
     def update_account_from_price(self) -> None:
+        self.__update_positions_from_price()
         self.__update_equity()
         self.__update_free_margin()
+
+    def __update_position_from_fill(self, event: FillEvent) -> None:
+        """Add new positions to the porfolio"""
+        self.p_manager.update_position_from_fill(event)
+
+    def __update_positions_from_price(self) -> None:
+        """Update portfolio holdings with the latest market price"""
+        for symbol in self.p_manager.positions:
+            self.p_manager.update_pnl(
+                symbol,
+                self.data_handler.get_latest_close_price(symbol)
+            )
             
     def __update_balance(self, prev_margin: float) -> None:
         # Check if a position has been closed
@@ -108,25 +119,20 @@ class SimBroker(Broker):
         self.free_margin = self.equity - self.get_used_margin()
 
     def __update_margin_from_fill(self, event: FillEvent) -> None:
-        if event.symbol in self.p_manager.positions:
+        if event.symbol in self.p_manager.positions: # Closing a position
             self.margin -= (self.p_manager.positions[event.symbol].get_cost()
                             / self.leverage)
-        else:
+        else: # Opening a position
             self.margin += (event.units * event.fill_price) / self.leverage
-
-            
-    def get_last_price(self) -> float:
-        price = {
-            symbol: self.data_handler.get_latest_close_price(symbol)
-            for symbol in self.p_manager.positions
-        }
-        return price
     
     def get_used_margin(self) -> float:
         symbols = self.p_manager.positions.keys()
         margin = sum(self.p_manager.positions[symbol].get_cost() for symbol in symbols)
         margin = margin/self.leverage
         return margin
+    
+    def get_positions(self):
+        pass
 
 
 class PositionManager:

@@ -47,8 +47,8 @@ class SimBroker(Broker):
             raise TypeError("Expected an order event object")
         
         order = self.__check_order(event)
+        price = self.data_handler.get_latest_close_price(event.symbol)
         if order == "OPEN":
-            price = self.data_handler.get_latest_close_price(event.symbol)
             cost = (event.units * price) / self.leverage
             if cost < self.free_margin:
                 fill_event = FillEvent(
@@ -130,7 +130,7 @@ class SimBroker(Broker):
 
     def __update_positions_from_price(self) -> None:
         """Update portfolio holdings with the latest market price"""
-        for symbol in self.p_manager.positions:
+        for symbol in self.get_positions():
             self.p_manager.update_pnl(
                 symbol,
                 self.data_handler.get_latest_close_price(symbol)
@@ -142,7 +142,7 @@ class SimBroker(Broker):
             self.balance += self.p_manager.history[-1].pnl
 
     def __update_equity(self) -> None:
-        total_pnl = self.p_manager.get_totat_pnl()
+        total_pnl = self.p_manager.get_total_pnl()
         self.equity += total_pnl
 
     def __update_free_margin(self) -> None:
@@ -150,8 +150,7 @@ class SimBroker(Broker):
 
     def __update_margin_from_fill(self, event: FillEvent) -> None:
         if event.result == "close":
-            self.margin -= (self.p_manager.positions[event.symbol].get_cost()
-                            / self.leverage)
+            self.margin -= self.get_position_history()[-1].get_cost() / self.leverage
         else:
             self.margin += (event.units * event.fill_price) / self.leverage
     
@@ -161,8 +160,14 @@ class SimBroker(Broker):
         margin = margin/self.leverage
         return margin
     
+    def get_position(self, symbol: str):
+        return self.p_manager.positions.get(symbol, False)
+
     def get_positions(self):
-        pass
+        return self.p_manager.positions
+    
+    def get_position_history(self):
+        return self.p_manager.history
 
 
 class PositionManager:

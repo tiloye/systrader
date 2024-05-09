@@ -42,8 +42,10 @@ class TestSimBroker(unittest.TestCase):
             events = self.event_queue,
             commission = 0.5
         )
+        self.data_handler.update_bars() # Add market event to the event queue
 
     def test_buy(self):
+        _ = self.event_queue.get(False) # Generate signal from market event
         symbol = "AAPL"
         self.broker.buy(symbol)
         event = self.event_queue.get(False)
@@ -55,6 +57,7 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(event.order_type, "MKT")
 
     def test_sell(self):
+        _ = self.event_queue.get(False)
         symbol = "AAPL"
         self.broker.sell(symbol)
         event = self.event_queue.get(False)
@@ -66,10 +69,9 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(event.order_type, "MKT")
 
     def test_execute_order(self):
-        self.data_handler.update_bars() # Add market event to the event queue
-        _ = self.event_queue.get(False) 
+        _ = self.event_queue.get(False)
 
-        self.broker.buy("AAPL") # Assume market event creates a signal
+        self.broker.buy("AAPL")
         order_event = self.event_queue.get(False)
         self.broker.execute_order(order_event)
         fill_event = self.event_queue.get(False)
@@ -79,11 +81,60 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(fill_event.timeindex.strftime("%Y-%m-%d"), "2024-05-03")
         self.assertEqual(fill_event.fill_price, 102.0)
 
-    def test_update_position_from_fill(self):
-        pass
+    def test_update_account_from_fill_open(self):
+        _ = self.event_queue.get(False)
+
+        self.broker.buy("AAPL")
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account_from_fill(fill_event)
+
+        self.assertIn(fill_event.symbol, self.broker.get_positions())
+        self.assertEqual(self.broker.get_position(fill_event.symbol).units, 100)
+        self.assertEqual(self.broker.margin, 10_200.0)
+        self.assertEqual(self.broker.balance, 100_000.0)
+
+    def test_update_account_from_fill_close(self):
+        _ = self.event_queue.get(False)
+        
+        # Open a position
+        self.broker.buy("AAPL")
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account_from_fill(fill_event)
+
+        # Close position after price increased
+        self.data_handler.update_bars()
+        _ = self.event_queue.get(False)
+        self.broker.close("AAPL")
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account_from_fill(fill_event)
+
+        self.assertNotIn(fill_event.symbol, self.broker.get_positions())
+        self.assertEqual(self.broker.margin, 0.0)
+        self.assertEqual(self.broker.balance, 100_399.0)
 
     def test_update_account_from_price(self):
-        pass
+        _ = self.event_queue.get(False)
+        
+        # Open a position
+        self.broker.buy("AAPL")
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account_from_fill(fill_event)
+
+        # Update account from market data
+        self.data_handler.update_bars()
+        _ = self.event_queue.get(False)
+        self.broker.update_account_from_price()
+        
+        self.assertEqual(self.broker.equity, 100_399.5)
+        self.assertEqual(self.broker.free_margin, 90_199.5)
     
     @classmethod
     def tearDownClass(cls):

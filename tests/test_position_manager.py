@@ -36,7 +36,7 @@ class TestPositionManager(unittest.TestCase):
         self.manager.update_position_from_fill(self.event)
         new_fill = self.event
         new_fill.timeindex = "2024-05-07"
-        new_fill.side = "SELL"
+        new_fill.result = "close"
         self.manager.update_position_from_fill(new_fill)
         closed_pos = self.manager.history[-1]
 

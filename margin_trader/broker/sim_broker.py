@@ -43,16 +43,47 @@ class SimBroker(Broker):
         Parameters:
         event - Contains an Event object with order information.
         """
-        if event.type == 'ORDER':
+        if not isinstance(event, OrderEvent):
+            raise TypeError("Expected an order event object")
+        
+        order = self.__check_order(event)
+        if order == "OPEN":
+            price = self.data_handler.get_latest_close_price(event.symbol)
+            cost = (event.units * price) / self.leverage
+            if cost < self.free_margin:
+                fill_event = FillEvent(
+                    self.data_handler.current_datetime,
+                    event.symbol,
+                    event.units,
+                    event.side,
+                    price,
+                    self.commission
+                )
+                self.events.put(fill_event)
+            else:
+                print("Order rejected; not enough margin")
+        else:
             fill_event = FillEvent(
-                self.data_handler.current_datetime,
-                event.symbol,
-                event.units,
-                event.side,
-                self.data_handler.get_latest_close_price(event.symbol),
-                self.commission
+                    self.data_handler.current_datetime,
+                    event.symbol,
+                    event.units,
+                    event.side,
+                    price,
+                    self.commission,
+                    "close"
             )
             self.events.put(fill_event)
+
+    def __check_order(self, event: OrderEvent):
+        """Check if an order event is to open or close a position."""
+        symbol = event.symbol
+        side = event.side
+        position = self.p_manager.positions.get(symbol, False)
+        if position:
+            if position.side != side:
+                return "CLOSE"
+        return "OPEN"
+            
     
     def buy(self, symbol: str,
             order_type: str = "MKT", units: int|float = 100) -> None:
@@ -84,10 +115,9 @@ class SimBroker(Broker):
         self.events.put(order)
 
     def update_account_from_fill(self, event: FillEvent) -> None:
-        curr_margin = self.margin
         self.__update_position_from_fill(event)
         self.__update_margin_from_fill(event)
-        self.__update_balance(curr_margin)
+        self.__update_balance(event)
 
     def update_account_from_price(self) -> None:
         self.__update_positions_from_price()
@@ -106,9 +136,9 @@ class SimBroker(Broker):
                 self.data_handler.get_latest_close_price(symbol)
             )
             
-    def __update_balance(self, prev_margin: float) -> None:
+    def __update_balance(self, event: FillEvent) -> None:
         # Check if a position has been closed
-        if self.margin < prev_margin:
+        if event.result == "close":
             self.balance += self.p_manager.history[-1].pnl
 
     def __update_equity(self) -> None:
@@ -119,10 +149,10 @@ class SimBroker(Broker):
         self.free_margin = self.equity - self.get_used_margin()
 
     def __update_margin_from_fill(self, event: FillEvent) -> None:
-        if event.symbol in self.p_manager.positions: # Closing a position
+        if event.result == "close":
             self.margin -= (self.p_manager.positions[event.symbol].get_cost()
                             / self.leverage)
-        else: # Opening a position
+        else:
             self.margin += (event.units * event.fill_price) / self.leverage
     
     def get_used_margin(self) -> float:
@@ -149,9 +179,9 @@ class PositionManager:
     def update_position_from_fill(self, event: FillEvent) -> None:
         """Add/remove a position for recently filled order."""
 
-        if event.symbol not in self.positions: # Position does not exist. Open a trade
+        if event.result == "open":
             self.__open_position(event)
-        else: # Position already exists. Close the trade
+        else:
             self.__close_position(event)
             
     def __open_position(self, event: FillEvent) -> None:

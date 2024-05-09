@@ -66,10 +66,10 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(event.order_type, "MKT")
 
     def test_execute_order(self):
-        self.data_handler.update_bars()
-        _ = self.event_queue.get(False) # Assume market event creates a signal
+        self.data_handler.update_bars() # Add market event to the event queue
+        _ = self.event_queue.get(False) 
 
-        self.broker.buy("AAPL")
+        self.broker.buy("AAPL") # Assume market event creates a signal
         order_event = self.event_queue.get(False)
         self.broker.execute_order(order_event)
         fill_event = self.event_queue.get(False)

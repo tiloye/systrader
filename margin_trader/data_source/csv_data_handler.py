@@ -33,46 +33,52 @@ class HistoricCSVDataHandler(DataHandler):
         self.latest_symbol_data = {}
         self.start_date = None
         self.current_datetime = None
-        self.continue_backtest = True     
+        self.continue_backtest = True
+        self.comb_index = None
 
-        self._open_convert_csv_files()
+        self._prepare_data()
 
-    def _open_convert_csv_files(self):
+    def _prepare_data(self):
+        """Prepare dataset for backtest"""
+        self._load_csv_files()
+        if self.comb_index is not None:
+            self.start_date = self.comb_index[0]
+            for symbol in self.symbol_list:
+                self.latest_symbol_data[symbol] = []
+                self.symbol_data[symbol] = self.symbol_data[symbol].reindex(
+                    index=self.comb_index, method='pad'
+                )
+                self.symbol_data[symbol] = self.symbol_data[symbol].iterrows()
+
+    def _load_csv_file(self, symbol):
         """
-        Opens the CSV files from the data directory, converting
-        them into pandas DataFrames within a symbol dictionary.
-
-        For this handler it will be assumed that the data is
-        taken from Yahoo. Thus its format will be respected.
+        Load a CSV file for a symbol into a pandas DataFrame with proper indexing.
         """
-        comb_index = None
+        columns = ["open", "high", "low", "close", "volume"]
+        filepath = os.path.join(self.csv_dir, f"{symbol}.csv")
+        df = pd.read_csv(
+            filepath,
+            index_col=0,
+            parse_dates=True
+        ).sort_index()
+        df.columns = df.columns.str.lower()
+        df.index.name = "datetime"
+        try:
+            df.columns = columns
+        except ValueError:
+            print("The number of columns in the datesetdoes\
+                   not match the expected number of columns")
+        return df
+    
+    def _load_csv_files(self):
         for symbol in self.symbol_list:
-            # Load the CSV file with no header information, indexed on date
-            self.symbol_data[symbol] = pd.read_csv(
-                os.path.join(self.csv_dir, f"{symbol}.csv"),
-                header=0, index_col=0, parse_dates=True,
-                names=[
-                    'datetime', 'open', 'high', 
-                    'low', 'close', 'adj_close', 'volume'
-                ]
-            )
-            self.symbol_data[symbol].sort_index(inplace=True)
-            
-            # Combine the index to pad forward values
-            if comb_index is None:
-                comb_index = self.symbol_data[symbol].index
+            self.symbol_data[symbol] = self._load_csv_file(symbol)
+
+             # Combine the index to pad forward values
+            if self.comb_index is None:
+                self.comb_index = self.symbol_data[symbol].index
             else:
-                comb_index.union(self.symbol_data[symbol].index)
-
-            # Set the latest symbol_data to None
-            self.latest_symbol_data[symbol] = []
-            self.start_date = comb_index[0]
-
-        for symbol in self.symbol_list:
-            self.symbol_data[symbol] = self.symbol_data[symbol].reindex(
-                index=comb_index, method='pad'
-            )
-            self.symbol_data[symbol] = self.symbol_data[symbol].iterrows()
+               self.comb_index.union(self.symbol_data[symbol].index)
 
     def _get_new_bar(self, symbol):
         """
@@ -85,7 +91,7 @@ class HistoricCSVDataHandler(DataHandler):
                 bar[1].open,
                 bar[1].high,
                 bar[1].low,
-                bar[1].adj_close,
+                bar[1].close,
                 bar[1].volume
         )
             

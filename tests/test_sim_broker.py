@@ -136,6 +136,30 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(self.broker.equity, 100_399.5)
         self.assertEqual(self.broker.free_margin, 90_199.5)
     
+    def test_check_pending_orders(self):
+        self.broker._exec_bar = "next" # Change broker MKT execution price to next open
+        _ = self.event_queue.get(False)
+
+        self.broker.buy("AAPL")
+        self.broker.check_pending_orders()
+        order_event = self.event_queue.get(False)
+        self.assertEqual(order_event.status, "PENDING")
+        self.assertEqual(order_event.order_type, "MKT")
+
+    def test_order_execution_at_open_price(self):
+        self.broker._exec_bar = "next"
+        _ = self.event_queue.get(False)
+
+        self.broker.buy("AAPL")
+        self.broker.check_pending_orders()
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account_from_fill(fill_event)
+        
+        self.assertEqual(fill_event.fill_price, 100.0)
+        self.assertEqual(self.broker.margin, 10_000.0)
+    
     @classmethod
     def tearDownClass(cls):
         if os.path.exists(CSV_DIR/"AAPL.csv"):

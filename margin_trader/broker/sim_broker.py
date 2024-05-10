@@ -23,7 +23,8 @@ class SimBroker(Broker):
             data_handler: DataHandler,
             events: Queue,
             leverage: int = 1,
-            commission: None|int|float = None
+            commission: None|int|float = None,
+            exec_bar = "same"
         ):
         self.balance = balance
         self.equity = balance
@@ -34,6 +35,8 @@ class SimBroker(Broker):
         self.leverage = leverage
         self.commission = commission
         self.p_manager = PositionManager()
+        self._exec_bar = exec_bar
+        self.pending_orders = Queue()
 
     def execute_order(self, event: OrderEvent) -> None:
         """
@@ -47,7 +50,12 @@ class SimBroker(Broker):
             raise TypeError("Expected an order event object")
         
         order = self.__check_order(event)
-        price = self.data_handler.get_latest_price(event.symbol)
+        if event.status == "PENDING":
+            if event.order_type == "MKT":
+                price = self.data_handler.get_latest_price(event.symbol, "open")
+        else:
+            price = self.data_handler.get_latest_price(event.symbol)
+        
         if order == "OPEN":
             cost = (event.units * price) / self.leverage
             if cost < self.free_margin:
@@ -101,9 +109,9 @@ class SimBroker(Broker):
         if position:
             side = position.side
             if side == "BUY":
-                self.sell(symbol, units)
+                self.sell(symbol, units=units)
             else:
-                self.buy(symbol, units)
+                self.buy(symbol, units=units)
         else:
             print(f"There is no open position for {symbol}")
 
@@ -112,7 +120,24 @@ class SimBroker(Broker):
         """Create an order event"""
         order = OrderEvent(symbol, order_type=order_type,
                            units=units, side=side)
-        self.events.put(order)
+        if order.order_type == "MKT":
+            if self._exec_bar == "same":
+                self.events.put(order)
+            elif self._exec_bar == "next":
+                order.status = "PENDING"
+                self.pending_orders.put(order)
+    
+    def check_pending_orders(self):
+        """Check if there are pending orders and them to the event queue."""
+        if not self.pending_orders.empty():
+            n_pending = len(self.pending_orders.queue)
+            for i in range(n_pending):
+                order = self.pending_orders.get(False)
+                if order.order_type == "MKT":
+                    self.events.put(order)
+                elif order.order_type == "LMT":
+                    # TODO: Add limit orders to event queue if price has been tagged
+                    pass
 
     def update_account_from_fill(self, event: FillEvent) -> None:
         self.__update_position_from_fill(event)

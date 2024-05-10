@@ -65,6 +65,7 @@ class OrderEvent(Event):
         self.order_type = order_type
         self.units = units
         self.side = side
+        self.status = None
 
     def print_order(self):
         """

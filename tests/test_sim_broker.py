@@ -117,6 +117,7 @@ class TestSimBroker(unittest.TestCase):
         self.assertNotIn(fill_event.symbol, self.broker.get_positions())
         self.assertEqual(self.broker.margin, 0.0)
         self.assertEqual(self.broker.balance, 100_399.0)
+        self.assertEqual(self.broker.equity, 100_399.0)
 
     def test_update_account_from_price(self):
         _ = self.event_queue.get(False)
@@ -130,11 +131,15 @@ class TestSimBroker(unittest.TestCase):
 
         # Update account from market data
         self.data_handler.update_bars()
-        _ = self.event_queue.get(False)
-        self.broker.update_account_from_price()
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account_from_price(mkt_event)
+        account_info = self.broker.account_history[-1]
         
         self.assertEqual(self.broker.equity, 100_399.5)
         self.assertEqual(self.broker.free_margin, 90_199.5)
+        self.assertEqual(account_info["timeindex"], self.data_handler.current_datetime)
+        self.assertEqual(account_info["balance"], 100_000.0)
+        self.assertEqual(account_info["equity"], 100_399.5)
     
     def test_check_pending_orders(self):
         self.broker._exec_bar = "next" # Change broker MKT execution price to next open

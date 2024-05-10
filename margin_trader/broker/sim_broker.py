@@ -37,6 +37,13 @@ class SimBroker(Broker):
         self.p_manager = PositionManager()
         self._exec_bar = exec_bar
         self.pending_orders = Queue()
+        self.account_history = [
+            {
+                "timeindex": self.data_handler.start_date,
+                "balance": self.balance,
+                "equity": self.equity
+            }
+        ]
 
     def execute_order(self, event: OrderEvent) -> None:
         """
@@ -143,11 +150,13 @@ class SimBroker(Broker):
         self.__update_position_from_fill(event)
         self.__update_margin_from_fill(event)
         self.__update_balance(event)
+        self.__update_equity(event)
 
-    def update_account_from_price(self) -> None:
+    def update_account_from_price(self, event) -> None:
         self.__update_positions_from_price()
-        self.__update_equity()
+        self.__update_equity(event)
         self.__update_free_margin()
+        self.__update_account_history()
 
     def __update_position_from_fill(self, event: FillEvent) -> None:
         """Add new positions to the porfolio"""
@@ -166,9 +175,12 @@ class SimBroker(Broker):
         if event.result == "close":
             self.balance += self.p_manager.history[-1].pnl
 
-    def __update_equity(self) -> None:
+    def __update_equity(self, event) -> None:
         total_pnl = self.p_manager.get_total_pnl()
-        self.equity += total_pnl
+        if event.type == "MARKET":
+            self.equity += total_pnl
+        elif event.type == "FILL":
+            self.equity = self.balance + total_pnl
 
     def __update_free_margin(self) -> None:
         self.free_margin = self.equity - self.get_used_margin()
@@ -178,6 +190,12 @@ class SimBroker(Broker):
             self.margin -= self.get_position_history()[-1].get_cost() / self.leverage
         else:
             self.margin += (event.units * event.fill_price) / self.leverage
+
+    def __update_account_history(self):
+        timeindex = self.data_handler.current_datetime
+        self.account_history.append(
+            {"timeindex": timeindex, "balance": self.balance, "equity": self.equity}
+        )
     
     def get_used_margin(self) -> float:
         symbols = self.p_manager.positions.keys()

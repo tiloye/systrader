@@ -47,7 +47,7 @@ class SimBroker(Broker):
             raise TypeError("Expected an order event object")
         
         order = self.__check_order(event)
-        price = self.data_handler.get_latest_close_price(event.symbol)
+        price = self.data_handler.get_latest_price(event.symbol)
         if order == "OPEN":
             cost = (event.units * price) / self.leverage
             if cost < self.free_margin:
@@ -133,7 +133,7 @@ class SimBroker(Broker):
         for symbol in self.get_positions():
             self.p_manager.update_pnl(
                 symbol,
-                self.data_handler.get_latest_close_price(symbol)
+                self.data_handler.get_latest_price(symbol)
             )
             
     def __update_balance(self, event: FillEvent) -> None:

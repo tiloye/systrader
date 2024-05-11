@@ -1,9 +1,8 @@
-import pandas as pd
 from datetime import datetime
 from queue import Queue
 from margin_trader.broker import Broker
 from margin_trader.data_source import DataHandler
-from margin_trader.event import FillEvent, OrderEvent
+from margin_trader.event import FillEvent, OrderEvent, MarketEvent
 from margin_trader.performance import create_sharpe_ratio, create_drawdowns
 
 class SimBroker(Broker):
@@ -24,7 +23,7 @@ class SimBroker(Broker):
             events: Queue,
             leverage: int = 1,
             commission: None|int|float = None,
-            exec_bar = "same"
+            exec_bar = "current"
         ):
         self.balance = balance
         self.equity = balance
@@ -128,7 +127,7 @@ class SimBroker(Broker):
         order = OrderEvent(symbol, order_type=order_type,
                            units=units, side=side)
         if order.order_type == "MKT":
-            if self._exec_bar == "same":
+            if self._exec_bar == "current":
                 self.events.put(order)
             elif self._exec_bar == "next":
                 order.status = "PENDING"
@@ -146,19 +145,20 @@ class SimBroker(Broker):
                     # TODO: Add limit orders to event queue if price has been tagged
                     pass
 
-    def update_account_from_fill(self, event: FillEvent) -> None:
-        self.__update_position_from_fill(event)
-        self.__update_margin_from_fill(event)
+    def update_account(self, event: MarketEvent|FillEvent):
+        self.__update_positions(event)
         self.__update_balance(event)
         self.__update_equity(event)
-
-    def update_account_from_price(self, event) -> None:
-        self.__update_positions_from_price()
-        self.__update_equity(event)
         self.__update_free_margin()
-        self.__update_account_history()
+        self.__update_account_history(event)
 
-    def __update_position_from_fill(self, event: FillEvent) -> None:
+    def __update_positions(self, event: MarketEvent|FillEvent):
+        if event.type == "MARKET":
+            self.__update_positions_from_price()
+        elif event.type == "FILL":
+            self.__update_positions_from_fill(event)
+
+    def __update_positions_from_fill(self, event: FillEvent) -> None:
         """Add new positions to the porfolio"""
         self.p_manager.update_position_from_fill(event)
 
@@ -172,31 +172,31 @@ class SimBroker(Broker):
             
     def __update_balance(self, event: FillEvent) -> None:
         # Check if a position has been closed
-        if event.result == "close":
+        if event.type == "FILL" and event.result == "close":
             self.balance += self.p_manager.history[-1].pnl
 
-    def __update_equity(self, event) -> None:
-        total_pnl = self.p_manager.get_total_pnl()
+    def __update_equity(self, event: MarketEvent|FillEvent) -> None:
         if event.type == "MARKET":
-            self.equity += total_pnl
+            self.equity += self.p_manager.get_total_pnl()
         elif event.type == "FILL":
-            self.equity = self.balance + total_pnl
+            if event.result == "close":
+                self.equity = self.balance + self.p_manager.get_total_pnl()
 
     def __update_free_margin(self) -> None:
         self.free_margin = self.equity - self.get_used_margin()
 
-    def __update_margin_from_fill(self, event: FillEvent) -> None:
-        if event.result == "close":
-            self.margin -= self.get_position_history()[-1].get_cost() / self.leverage
-        else:
-            self.margin += (event.units * event.fill_price) / self.leverage
-
-    def __update_account_history(self):
+    def __update_account_history(self, event):
         timeindex = self.data_handler.current_datetime
-        self.account_history.append(
-            {"timeindex": timeindex, "balance": self.balance, "equity": self.equity}
-        )
-    
+        if event.type == "MARKET":
+            self.account_history.append(
+                {"timeindex": timeindex, "balance": self.balance, "equity": self.equity}
+            )
+        elif event.type == "FILL" and event.result == "close":
+            recent_history = self.account_history[-1]
+            if timeindex == recent_history["timeindex"]:
+                recent_history["balance"] = self.balance
+                recent_history["equity"] = self.equity
+
     def get_used_margin(self) -> float:
         symbols = self.p_manager.positions.keys()
         margin = sum(self.p_manager.positions[symbol].get_cost() for symbol in symbols)
@@ -226,7 +226,6 @@ class PositionManager:
 
     def update_position_from_fill(self, event: FillEvent) -> None:
         """Add/remove a position for recently filled order."""
-
         if event.result == "open":
             self.__open_position(event)
         else:

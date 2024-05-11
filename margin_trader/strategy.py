@@ -15,6 +15,12 @@ class Strategy(ABC):
     since it obtains the bar tuples from a queue object.
     """
 
+    def __init__(self, events, symbols, data, broker):
+        self.events = events
+        self.symbols = symbols
+        self.data = data
+        self.broker = broker
+
     @abstractmethod
     def calculate_signals(self):
         """

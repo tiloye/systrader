@@ -1,9 +1,9 @@
+import pandas as pd
 from datetime import datetime
 from queue import Queue
 from margin_trader.broker import Broker
 from margin_trader.data_source import DataHandler
 from margin_trader.event import FillEvent, OrderEvent, MarketEvent
-from margin_trader.performance import create_sharpe_ratio, create_drawdowns
 
 class SimBroker(Broker):
     """
@@ -209,8 +209,18 @@ class SimBroker(Broker):
     def get_positions(self):
         return self.p_manager.positions
     
-    def get_position_history(self):
+    def get_positions_history(self):
         return self.p_manager.history
+    
+    def get_account_history(self):
+        balance_equity = pd.DataFrame.from_records(self.account_history)
+        position_history = [vars(position) for position in self.get_positions_history()]
+        position_history = pd.DataFrame.from_records(position_history)
+        position_history.rename(
+            columns={"fill_price": "open_price", "last_price":"close_price"},
+            inplace=True
+        )
+        return {"balance_equity": balance_equity, "positions": position_history}
 
 
 class PositionManager:
@@ -271,7 +281,6 @@ class Position:
         self.side = side
         self.open_time = timeindex
         self.pnl = 0
-        self.__cost = self.fill_price * self.units
 
     def update_pnl(self) -> None:
         pnl = (self.last_price - self.fill_price) * self.units
@@ -291,7 +300,7 @@ class Position:
         self.close_time = timeindex
 
     def get_cost(self) -> float:
-        return self.__cost
+        return self.fill_price * self.units
 
     def __repr__(self) -> str:
         position = f"{self.symbol}|{self.side}|{self.units}|{self.pnl}"

@@ -1,6 +1,7 @@
 import os
 import csv
 import unittest
+import pandas as pd
 from pathlib import Path
 from queue import Queue
 from margin_trader.data_source import HistoricCSVDataHandler
@@ -135,7 +136,7 @@ class TestSimBroker(unittest.TestCase):
         self.assertDictEqual(self.broker.get_positions(), {})
 
     def test_get_position_history(self):
-        self.assertListEqual(self.broker.get_position_history(), [])
+        self.assertListEqual(self.broker.get_positions_history(), [])
 
     def test_update_account_market_event(self):
         mkt_event = self.event_queue.get(False)
@@ -213,8 +214,8 @@ class TestSimBroker(unittest.TestCase):
         self.broker.update_account(fill_event)
 
         self.assertNotIn("AAPL", self.broker.get_positions())
-        self.assertEqual("AAPL", self.broker.get_position_history()[-1].symbol)
-        self.assertEqual(self.broker.get_position_history()[-1].close_time,
+        self.assertEqual("AAPL", self.broker.get_positions_history()[-1].symbol)
+        self.assertEqual(self.broker.get_positions_history()[-1].close_time,
                          self.data_handler.current_datetime)
         self.assertEqual(self.broker.balance, 100_399.0)
         self.assertEqual(self.broker.equity, 100_399.0)
@@ -236,6 +237,40 @@ class TestSimBroker(unittest.TestCase):
         order_event = self.event_queue.get(False)
         self.assertEqual(order_event.status, "PENDING")
         self.assertEqual(order_event.order_type, "MKT")
+
+    def test_get_account_history(self):
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+        self.broker.buy("AAPL")
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account(fill_event)
+        self.data_handler.update_bars()
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+        self.broker.close("AAPL")
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account(fill_event)
+        account_history = self.broker.get_account_history()
+        balance_equity_col = ["timeindex", "balance", "equity"]
+        positions_col = ["symbol", "units", "open_price",
+                         "close_price", "commission", "pnl", "open_time",
+                         "close_time"]
+
+        self.assertIn("balance_equity", account_history)
+        self.assertIn("positions", account_history)
+        self.assertIsInstance(account_history["balance_equity"], pd.DataFrame)
+        self.assertIsInstance(account_history["positions"], pd.DataFrame)
+        self.assertTrue(
+            set(balance_equity_col).issubset(account_history["balance_equity"].columns)
+        )
+        self.assertTrue(
+            set(positions_col).issubset(account_history["positions"].columns)
+        )
+
     
     @classmethod
     def tearDownClass(cls):

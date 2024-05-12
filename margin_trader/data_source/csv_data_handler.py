@@ -12,7 +12,7 @@ class HistoricCSVDataHandler(BacktestDataHandler):
     trading interface. 
     """
 
-    def __init__(self, events, csv_dir, symbol_list, add_label=None):
+    def __init__(self, csv_dir, symbol_list, add_label=None):
         """
         Initialises the historic data handler by requesting
         the location of the CSV files and a list of symbols.
@@ -26,7 +26,7 @@ class HistoricCSVDataHandler(BacktestDataHandler):
         symbol_list - A list of symbol strings.
         """
         self.csv_dir = csv_dir
-        super().__init__(events=events, symbol_list=symbol_list, add_label=add_label)
+        super().__init__(symbol_list=symbol_list, add_label=add_label)
 
     def _load_data(self, symbol):
         """

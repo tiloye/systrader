@@ -15,8 +15,7 @@ class Strategy(ABC):
     since it obtains the bar tuples from a queue object.
     """
 
-    def __init__(self, events, symbols, data, broker):
-        self.events = events
+    def __init__(self, symbols, data, broker):
         self.symbols = symbols
         self.data = data
         self.broker = broker
@@ -27,3 +26,6 @@ class Strategy(ABC):
         Provides the mechanisms to calculate the list of signals.
         """
         raise NotImplementedError("Should implement calculate_signals()")
+    
+    def _add_event_queue(self, event_queue):
+        self.events = event_queue

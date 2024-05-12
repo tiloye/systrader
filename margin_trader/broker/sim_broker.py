@@ -18,9 +18,8 @@ class SimBroker(Broker):
     
     def __init__(
             self,
-            balance: int|float,
             data_handler: DataHandler,
-            events: Queue,
+            balance: int|float = 100_000,
             leverage: int = 1,
             commission: None|int|float = None,
             exec_bar = "current"
@@ -30,7 +29,6 @@ class SimBroker(Broker):
         self.free_margin = balance
         self.margin = 0.0
         self.data_handler = data_handler
-        self.events = events
         self.leverage = leverage
         self.commission = commission
         self.p_manager = PositionManager()
@@ -43,6 +41,9 @@ class SimBroker(Broker):
                 "equity": self.equity
             }
         ]
+
+    def _add_event_queue(self, event_queue):
+        self.events = event_queue
 
     def execute_order(self, event: OrderEvent) -> None:
         """

@@ -35,8 +35,7 @@ class DataHandler(ABC):
 class BacktestDataHandler(DataHandler):
     """Handle data for backtesting by loading the data into pandas dataframe."""
 
-    def __init__(self, events, symbol_list, add_label=None):
-        self.events = events
+    def __init__(self, symbol_list, add_label=None):
         self.symbol_list = symbol_list
         self.symbol_data = {}
         self.latest_symbol_data = {}
@@ -48,6 +47,9 @@ class BacktestDataHandler(DataHandler):
         self.__extra_label = add_label
 
         self._prepare_data()
+
+    def _add_event_queue(self, event_queue):
+        self.events = event_queue
 
     def _prepare_data(self):
         """Prepare dataset for backtest"""
@@ -139,7 +141,7 @@ class BacktestDataHandler(DataHandler):
                 else:
                     if bar is not None:
                         self.latest_symbol_data[s].append(bar)
-            self.current_datetime = bar.Index
+                        self.current_datetime = bar.Index
             self.events.put(MarketEvent())
         else:
             print("The data history has no symbols.")

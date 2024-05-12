@@ -31,10 +31,10 @@ class TestHistoricalCSVDataHandler(unittest.TestCase):
         self.event_queue = Queue()
         self.symbols = ["AAPL"]
         self.bars = HistoricCSVDataHandler(
-            events = self.event_queue,
             csv_dir = CSV_DIR,
             symbol_list = self.symbols
         )
+        self.bars._add_event_queue(self.event_queue)
     
     def test_initialisation(self):
         self.assertEqual(CSV_DIR, self.bars.csv_dir)

@@ -33,16 +33,17 @@ class TestSimBroker(unittest.TestCase):
     def setUp(self):
         self.event_queue = Queue()
         self.data_handler = HistoricCSVDataHandler(
-            events = self.event_queue,
             csv_dir = CSV_DIR,
             symbol_list = symbols
         )
+        self.data_handler._add_event_queue(self.event_queue)
+        
         self.broker = SimBroker(
             balance = 100_000.0,
             data_handler = self.data_handler,
-            events = self.event_queue,
             commission = 0.5
         )
+        self.broker._add_event_queue(self.event_queue)
         self.data_handler.update_bars() # Add market event to the event queue
 
     def test_init(self):

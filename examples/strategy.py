@@ -1,5 +1,7 @@
 from margin_trader.strategy import Strategy
-from margin_trader.event import SignalEvent
+from margin_trader.data_source import HistoricCSVDataHandler
+from margin_trader.broker import SimBroker
+from margin_trader.trader import Trader
 
 class BuyAndHoldStrategy(Strategy):
     """
@@ -21,8 +23,26 @@ class BuyAndHoldStrategy(Strategy):
         event - A MarketEvent object. 
         """
         if event.type == 'MARKET':
-            for s in self.symbol_list:
-                bars = self.bars.get_latest_bars(s, N=1)
+            for s in self.symbols:
+                bars = self.data.get_latest_bars(s, N=1)
                 if bars is not None and bars != []:
                     if s not in self.broker.get_positions():
                         self.broker.buy(s)
+
+
+data_handler = HistoricCSVDataHandler(
+    csv_dir="./data/",
+    symbol_list=["AAPL", "MSFT"]
+)
+broker = SimBroker(
+    data_handler=data_handler,
+    commission=0.0
+)
+trader = Trader(
+    symbols=["AAPL", "MSFT"],
+    data_handler=data_handler,
+    broker=broker,
+    strategy=BuyAndHoldStrategy
+)
+result = trader._run_backtest()
+print(result)

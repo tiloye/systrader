@@ -17,10 +17,34 @@ class TestPerformance(unittest.TestCase):
         gross_return = round(gross_return, 4)
         self.assertEqual(gross_return, 0.1200)
 
+    def test_calculate_annual_return(self):
+        ann_ret = perf.calculate_annual_return(self.returns)
+        ann_ret = round(ann_ret, 4)
+        self.assertEqual(ann_ret, 16.3898)
+
+    def test_calculate_annual_volatility(self):
+        ann_vol = perf.calculate_annual_volatility(self.returns)
+        ann_vol = round(ann_vol, 4)
+        self.assertEqual(ann_vol, 0.6686)
+
+    def test_calculate_max_drawdown(self):
+        dd = perf.calculate_max_drawdown(self.returns)
+        dd = round(dd, 4)
+        self.assertEqual(dd, -0.0755)
+
+    def test_calculate_longest_drawdown_period(self):
+        dd_duration = perf.calculate_longest_dd_period(self.returns)
+        self.assertEqual(dd_duration, 6)
+
     def test_calculate_sharpe_ratio(self):
         sr = perf.calculate_sharpe_ratio(self.returns)
         sr = round(sr, 4)
         self.assertEqual(round(sr, 4), 4.5939)
+
+    def test_calculate_var(self):
+        var = perf.calculate_var(self.returns)
+        var = round(var, 4)
+        self.assertEqual(var, -0.0390)
 
 if __name__ == "__main__":
     unittest.main()

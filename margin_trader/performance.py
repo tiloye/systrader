@@ -3,7 +3,7 @@ import pandas as pd
 import empyrical as emp
 
 def calculate_total_return(returns: pd.Series|np.ndarray) -> float:
-    """Calculates the total return on investment (ROI) from a series of returns.
+    """Calculate the total return on investment (ROI) from a series of returns.
 
     Parameters
     ----------
@@ -21,7 +21,7 @@ def calculate_total_return(returns: pd.Series|np.ndarray) -> float:
     return roi
 
 def calculate_annual_return(returns: pd.Series|np.ndarray, periods: int=252) -> float:
-    """Calculates the annualized return of a series of returns.
+    """Calculate the annualized return of a series of returns.
 
     This function computes the compounded annual growth rate (CAGR) of the 
     investment based on a provided series of returns.
@@ -49,7 +49,7 @@ def calculate_annual_return(returns: pd.Series|np.ndarray, periods: int=252) -> 
 
 def calculate_annual_volatility(returns: pd.Series|np.ndarray,
                                 periods: int=252) -> float:
-    """Calculates the annualized volatility of a series of returns.
+    """Calculate the annualized volatility of a series of returns.
 
     Parameters
     ----------
@@ -161,4 +161,62 @@ def calculate_longest_dd_period(returns: pd.Series|np.ndarray) -> int:
         curr_dd = dd_series.iloc[i]
         duration[i] = 0 if curr_dd == 0 else duration[i-1] + 1
     return max(duration)
+
+def calculate_win_rate(position_outcome: pd.Series) -> float:
+    """Calcuate the percentage difference between 
+    number of losing trades and winnig trades
+
+    Parameters
+    ----------
+    position_outcome
+        A pandas Series containing the outcome of each trade, where positive
+        values represent wins and negative values represent losses.
+
+    Returns
+    -------
+    float
+        The win rate as a percentage between 0 and 1.
+    """
+    result = position_outcome.gt(0).astype(int)
+    win_rate = result.sum()/len(result)
+    return win_rate
+
+def calculate_expectancy(position_outcome: pd.Series) -> float:
+    """Calculate the expectancy (average profit per trade)
+    based on win rate, average win size, and average loss size.
+
+    Parameters
+    ----------
+    position_outcome
+        A pandas Series containing the outcome of each trade, where positive
+        values represent wins and negative values represent losses.
+
+    Returns
+    -------
+    float
+        The expectancy, representing the average profit per trade.
+    """
+    avg_win = position_outcome.loc[position_outcome > 0].mean()
+    avg_loss = -1 * position_outcome.loc[position_outcome < 0].mean()
+    win_perc = calculate_win_rate(position_outcome)
+    loss_perc = 1 - win_perc
+    return win_perc*avg_win - loss_perc*avg_loss
+
+def calculate_profit_factor(position_outcome: pd.Series) -> float:
+    """Calculates the profit factor(ratio of average win size to average loss size).
+
+    Parameters
+    ----------
+    position_outcome
+        A pandas Series containing the outcome of each trade, where positive
+        values represent wins and negative values represent losses.
+
+    Returns
+    -------
+    float
+        The profit factor, representing the ratio of average win to average loss.
+    """
+    gross_win = position_outcome.loc[position_outcome > 0].sum()
+    gross_loss = -1 * position_outcome.loc[position_outcome < 0].sum()
+    return gross_win/gross_loss
 

@@ -46,5 +46,20 @@ class TestPerformance(unittest.TestCase):
         var = round(var, 4)
         self.assertEqual(var, -0.0390)
 
+    def test_calculate_win_rate(self):
+        self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
+        win_rate = perf.calculate_win_rate(self.data)
+        self.assertEqual(win_rate, 0.7)
+
+    def test_calculate_expectancy(self):
+        self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
+        expectancy = perf.calculate_expectancy(self.data)
+        self.assertAlmostEqual(expectancy, 41.0)
+
+    def test_calcualte_profit_factor(self):
+        self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
+        pfactor = perf.calculate_profit_factor(self.data)
+        self.assertAlmostEqual(pfactor, 2.3099, 4)
+
 if __name__ == "__main__":
     unittest.main()

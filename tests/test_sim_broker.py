@@ -55,7 +55,7 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(self.broker.leverage, 1)
         self.assertEqual(self.broker.commission, 0.5)
         self.assertIsInstance(self.broker.p_manager, PositionManager)
-        self.assertEqual(self.broker._exec_bar, "current")
+        self.assertEqual(self.broker._exec_price, "current")
         self.assertIsInstance(self.broker.pending_orders, Queue)
         acct_history = [
             {
@@ -104,7 +104,7 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(fill_event.fill_price, 102.0)
 
     def test_execute_order_next_bar_open(self):
-        self.broker._exec_bar = "next" # Change broker MKT execution price to next open
+        self.broker._exec_price = "next" # Change broker MKT execution price to next open
         _ = self.event_queue.get(False)
         self.broker.buy("AAPL")
         self.broker.check_pending_orders()
@@ -230,7 +230,7 @@ class TestSimBroker(unittest.TestCase):
 
     
     def test_check_pending_orders(self):
-        self.broker._exec_bar = "next" # Change broker MKT execution price to next open
+        self.broker._exec_price = "next" # Change broker MKT execution price to next open
         _ = self.event_queue.get(False)
 
         self.broker.buy("AAPL")

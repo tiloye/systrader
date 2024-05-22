@@ -46,3 +46,4 @@ trader = Trader(
 )
 result = trader._run_backtest()
 print(result)
+trader.plot()

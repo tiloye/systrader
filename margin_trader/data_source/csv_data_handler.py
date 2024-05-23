@@ -1,36 +1,69 @@
 import os
 import pandas as pd
-
+from pathlib import Path
 from margin_trader.data_source.data_handler import BacktestDataHandler
-from margin_trader.event import MarketEvent
 
 class HistoricCSVDataHandler(BacktestDataHandler):
     """
-    HistoricCSVDataHandler is designed to read CSV files for
-    each requested symbol from disk and provide an interface
-    to obtain the "latest" bar in a manner identical to a live
-    trading interface. 
+    Read CSV files for each requested symbol from disk and load them into a dataframe.
+    
+    The class provides an interface to obtain the "latest" bar in a manner identical 
+    to a live trading interface. It will be assumed that all files are of the form
+    'symbol.csv', where symbol is a string in the list.
+
+    Parameters
+    ----------
+    csv_dir : str
+        Absolute directory path to the CSV files.
+    symbol_list : list
+        A list of symbol strings.
+    add_label : list, optional
+        Additional labels to include in the data.
+
+    Attributes
+    ----------
+    csv_dir : str
+        Absolute directory path to the CSV files.
+    symbol_list : list
+        A list of symbols to backtest.
+    symbol_data : dict
+        A dictionary to store the data for each symbol.
+    latest_symbol_data : dict
+        A dictionary to store the latest data for each symbol.
+    start_date : datetime or None
+        The start date of the backtest.
+    current_datetime : datetime or None
+        The current datetime in the backtest.
+    continue_backtest : bool
+        A flag to indicate whether to continue the backtest.
+    comb_index : pandas.Index or None
+        The combined index of all symbols' data.
+    events : Queue
+        The event queue for the backtest. 
     """
 
-    def __init__(self, csv_dir, symbol_list, add_label=None):
-        """
-        Initialises the historic data handler by requesting
-        the location of the CSV files and a list of symbols.
-
-        It will be assumed that all files are of the form
-        'symbol.csv', where symbol is a string in the list.
-
-        Parameters:
-        events - The Event Queue.
-        csv_dir - Absolute directory path to the CSV files.
-        symbol_list - A list of symbol strings.
-        """
+    def __init__(
+            self,
+            csv_dir: str|Path,
+            symbol_list: list[str],
+            add_label: list[str]|None = None
+            ):
         self.csv_dir = csv_dir
         super().__init__(symbol_list=symbol_list, add_label=add_label)
 
-    def _load_data(self, symbol):
+    def _load_data(self, symbol: str):
         """
         Load a CSV file for a symbol into a pandas DataFrame with proper indexing.
+
+        Parameters
+        ----------
+        symbol
+            The symbol to load the data for.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The loaded data for the symbol.
         """
         filepath = os.path.join(self.csv_dir, f"{symbol}.csv")
         df = pd.read_csv(

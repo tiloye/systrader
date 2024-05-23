@@ -33,7 +33,35 @@ class DataHandler(ABC):
     
 
 class BacktestDataHandler(DataHandler):
-    """Handle data for backtesting by loading the data into pandas dataframe."""
+    """
+    Handle data for backtesting by loading the data into pandas DataFrame.
+
+    Parameters
+    ----------
+    symbol_list : list
+        A list of symbols to backtest.
+    add_label : list, optional
+        Additional labels to include in the data.
+
+    Attributes
+    ----------
+    symbol_list : list
+        A list of symbols to backtest.
+    symbol_data : dict
+        A dictionary to store the data for each symbol.
+    latest_symbol_data : dict
+        A dictionary to store the latest data for each symbol.
+    start_date : datetime or None
+        The start date of the backtest.
+    current_datetime : datetime or None
+        The current datetime in the backtest.
+    continue_backtest : bool
+        A flag to indicate whether to continue the backtest.
+    comb_index : pandas.Index or None
+        The combined index of all symbols' data.
+    events : Queue
+        The event queue for the backtest.
+    """
 
     def __init__(self, symbol_list, add_label=None):
         self.symbol_list = symbol_list
@@ -92,23 +120,43 @@ class BacktestDataHandler(DataHandler):
             else:
                self.comb_index.union(self.symbol_data[symbol].index)
 
-    def _load_data(self, symbol):
+    def _load_data(self, symbol: str):
         """
         Load a data for a symbol into a pandas DataFrame with proper indexing.
         """
         raise NotImplementedError("Should implement loading symbol data from source")
     
-    def _get_new_bar(self, symbol):
+    def _get_new_bar(self, symbol: str):
         """
-        Returns the latest bar from the data feed as a named tuple of 
-        Symbol(Index, open, low, high, close, volume).
+        Return the latest bar from the data feed as a named tuple.
+
+        Parameters
+        ----------
+        symbol
+            The symbol to get the latest bar for.
+
+        Returns
+        -------
+        namedtuple
+            The latest bar for the symbol.
         """
         return next(self.symbol_data[symbol])
             
-    def get_latest_bars(self, symbol, N=1):
+    def get_latest_bars(self, symbol: str, N: int = 1):
         """
-        Returns the last N bars from the latest_symbol list,
-        or N-k if less available.
+        Return the last N bars from the latest_symbol list, or N-k if less available.
+
+        Parameters
+        ----------
+        symbol
+            The symbol to get the latest bars for.
+        N
+            The number of bars to return, by default 1.
+
+        Returns
+        -------
+        list
+            The last N bars for the symbol.
         """
         try:
             bars_list = self.latest_symbol_data[symbol]
@@ -117,7 +165,23 @@ class BacktestDataHandler(DataHandler):
         else:
             return bars_list[-N:]
 
-    def get_latest_price(self, symbol, price="close"):
+    def get_latest_price(self, symbol: str, price: str = "close"):
+        """
+        Return the latest price for a symbol.
+
+        Parameters
+        ----------
+        symbol
+            The symbol to get the latest price for.
+        price
+            The price type to return ("open", "high", "low", "close"), 
+            by default "close".
+
+        Returns
+        -------
+        float
+            The latest price for the symbol.
+        """
         latest_bar = self.get_latest_bars(symbol)
         if price == "open":
             return latest_bar[0].open
@@ -129,9 +193,10 @@ class BacktestDataHandler(DataHandler):
         
     def update_bars(self):
         """
-        Pushes the latest bar to the latest_symbol_data structure
-        for all symbols successfully loaded in the symbol data.
+        Push the latest bar to the latest_symbol_data structure for all symbols 
+        successfully loaded in the symbol data.
         """
+
         if self.symbol_data:
             for s in self.symbol_data:
                 try:

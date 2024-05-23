@@ -24,26 +24,30 @@ class BuyAndHoldStrategy(Strategy):
         """
         if event.type == 'MARKET':
             for s in self.symbols:
-                bars = self.data.get_latest_bars(s, N=1)
-                if bars is not None and bars != []:
-                    if s not in self.broker.get_positions():
+                if s not in self.broker.get_positions():
+                    bars = self.data.get_latest_bars(s, N=1)
+                    if bars is not None and bars != []:
                         self.broker.buy(s)
 
 
-data_handler = HistoricCSVDataHandler(
-    csv_dir="./data/",
-    symbol_list=["AAPL", "MSFT"]
-)
-broker = SimBroker(
-    data_handler=data_handler,
-    commission=0.0
-)
-trader = Trader(
-    symbols=["AAPL", "MSFT"],
-    data_handler=data_handler,
-    broker=broker,
-    strategy=BuyAndHoldStrategy
-)
-result = trader._run_backtest()
-print(result)
-trader.plot()
+if __name__ == "__main__":
+    SYMBOLS = ["AAPL"]
+    DATA_DIR = "./data/"
+
+    data_handler = HistoricCSVDataHandler(
+        csv_dir=DATA_DIR,
+        symbol_list=SYMBOLS
+    )
+    sim_broker = SimBroker(
+        data_handler=data_handler,
+        commission=0.0
+    )
+    strategy = BuyAndHoldStrategy(symbols=SYMBOLS, data=data_handler, broker=sim_broker)
+    trader = Trader(
+        data_handler=data_handler,
+        broker=sim_broker,
+        strategy=strategy
+    )
+    result = trader._run_backtest()
+    print(result)
+    trader.plot()

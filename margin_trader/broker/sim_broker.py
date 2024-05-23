@@ -68,13 +68,7 @@ class SimBroker(Broker):
         self.p_manager = PositionManager()
         self._exec_price = exec_price
         self.pending_orders = Queue()
-        self.account_history = [
-            {
-                "timeindex": self.data_handler.start_date,
-                "balance": self.balance,
-                "equity": self.equity
-            }
-        ]
+        self.account_history = []
 
     def _add_event_queue(self, event_queue):
         self.events = event_queue
@@ -286,11 +280,8 @@ class SimBroker(Broker):
 
     def __update_equity(self, event: MarketEvent|FillEvent) -> None:
         """Update the account equity based on market or fill events."""
-        if event.type == "MARKET":
-            self.equity += self.p_manager.get_total_pnl()
-        elif event.type == "FILL":
-            if event.result == "close":
-                self.equity = self.balance + self.p_manager.get_total_pnl()
+        if event.type == "MARKET" or event.type == "FILL":
+            self.equity = self.balance + self.p_manager.get_total_pnl()
 
     def __update_free_margin(self) -> None:
         """Update the free margin available for trading."""

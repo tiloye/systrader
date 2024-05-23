@@ -17,9 +17,9 @@ class TestSimBroker(unittest.TestCase):
         data = [
             ["2024-05-03", 100.0, 105.0, 98.0, 102.0, 102.0, 0],
             ["2024-05-04", 102.0, 108.0, 100.0, 106.0, 106.0, 0],
-            ["2024-05-07", 106.0, 110.0, 104.0, 108.0, 108.0, 0],
-            ["2024-05-08", 108.0, 112.0, 106.0, 110.0, 110.0, 0],
-            ["2024-05-09", 110.0, 115.0, 108.0, 112.0, 112.0, 0]
+            ["2024-05-05", 106.0, 110.0, 104.0, 108.0, 108.0, 0],
+            ["2024-05-06", 108.0, 112.0, 106.0, 110.0, 110.0, 0],
+            ["2024-05-07", 110.0, 115.0, 108.0, 112.0, 112.0, 0]
         ]
 
         with open(CSV_DIR/"AAPL.csv", "w") as csvfile:
@@ -57,14 +57,7 @@ class TestSimBroker(unittest.TestCase):
         self.assertIsInstance(self.broker.p_manager, PositionManager)
         self.assertEqual(self.broker._exec_price, "current")
         self.assertIsInstance(self.broker.pending_orders, Queue)
-        acct_history = [
-            {
-                "timeindex": self.data_handler.current_datetime,
-                "balance": 100_000.0,
-                "equity": 100_000
-            }
-        ]
-        self.assertListEqual(self.broker.account_history, acct_history)
+        self.assertListEqual(self.broker.account_history, [])
 
 
     def test_buy(self):
@@ -153,7 +146,8 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(recent_acct_history["equity"], self.broker.equity)
 
     def test_update_account_fill_event(self):
-        _ = self.event_queue.get(False)
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
         self.broker.buy("AAPL")
         order_event = self.event_queue.get(False)
         self.broker.execute_order(order_event)

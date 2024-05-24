@@ -104,9 +104,13 @@ class TestSimBroker(unittest.TestCase):
         order_event = self.event_queue.get(False)
         self.broker.execute_order(order_event)
         fill_event = self.event_queue.get(False)
+        self.broker.update_account(fill_event)
+        position = self.broker.get_position(fill_event.symbol)
 
-        self.assertEqual(fill_event.timeindex.strftime("%Y-%m-%d"), "2024-05-03")
-        self.assertEqual(fill_event.fill_price, 100.0)
+        self.assertEqual(position.open_time.strftime("%Y-%m-%d"), "2024-05-03")
+        self.assertEqual(position.fill_price, 100.0)
+        self.assertEqual(position.last_price, 102.0)
+        self.assertEqual(position.pnl, 200.0 - self.broker.commission)
 
     def test_get_used_margin_no_positions(self):
         used_margin = self.broker.get_used_margin()

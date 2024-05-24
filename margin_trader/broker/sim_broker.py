@@ -225,9 +225,11 @@ class SimBroker(Broker):
             elif self._exec_price == "next":
                 order.status = "PENDING"
                 self.pending_orders.put(order)
+        else:
+            raise NotImplementedError(f"Cannot create {order.order_type}.")
     
     def check_pending_orders(self):
-        """Check if there are pending orders and them to the event queue."""
+        """Check if there are pending orders and add them to the event queue."""
         if not self.pending_orders.empty():
             n_pending = len(self.pending_orders.queue)
             for i in range(n_pending):
@@ -259,6 +261,12 @@ class SimBroker(Broker):
             self.__update_positions_from_price()
         elif event.type == "FILL":
             self.__update_positions_from_fill(event)
+            if event.result == "open" and self._exec_price == "next":
+                # Update the PnL of an order executed at the open price.
+                self.p_manager.update_pnl(
+                    event.symbol,
+                    self.data_handler.get_latest_price(event.symbol)
+                )
 
     def __update_positions_from_fill(self, event: FillEvent) -> None:
         """Add new positions to the porfolio"""

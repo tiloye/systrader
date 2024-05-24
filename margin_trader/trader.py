@@ -38,6 +38,7 @@ class Trader:
                 else:
                     if event is not None:
                         if event.type == 'MARKET':
+                            self.broker.check_pending_orders()
                             self.strategy.calculate_signals(event)
                             self.broker.update_account(event)
                         elif event.type == 'ORDER':

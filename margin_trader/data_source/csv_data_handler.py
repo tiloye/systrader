@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from pathlib import Path
+from datetime import datetime
 from margin_trader.data_source.data_handler import BacktestDataHandler
 
 class HistoricCSVDataHandler(BacktestDataHandler):
@@ -15,8 +16,12 @@ class HistoricCSVDataHandler(BacktestDataHandler):
     ----------
     csv_dir : str
         Absolute directory path to the CSV files.
-    symbol_list : list
+    symbols : list
         A list of symbol strings.
+    start_date : str or datetime
+        The start date of the backtest.
+    end_date : str or datetime
+        The end date of the backtest.
     add_label : list, optional
         Additional labels to include in the data.
 
@@ -30,9 +35,11 @@ class HistoricCSVDataHandler(BacktestDataHandler):
         A dictionary to store the data for each symbol.
     latest_symbol_data : dict
         A dictionary to store the latest data for each symbol.
-    start_date : datetime or None
+    start_date : str or datetime
         The start date of the backtest.
-    current_datetime : datetime or None
+    end_date : str or datetime
+        The end date of the backtest.
+    current_datetime : str or datetime.
         The current datetime in the backtest.
     continue_backtest : bool
         A flag to indicate whether to continue the backtest.
@@ -45,13 +52,16 @@ class HistoricCSVDataHandler(BacktestDataHandler):
     def __init__(
             self,
             csv_dir: str|Path,
-            symbol_list: list[str],
+            symbols: list[str],
+            start_date: str|datetime = None,
+            end_date: str|datetime = None,
             add_label: list[str]|None = None
             ):
         self.csv_dir = csv_dir
-        super().__init__(symbol_list=symbol_list, add_label=add_label)
+        super().__init__(symbols=symbols, start_date=start_date,
+                         end_date=end_date, add_label=add_label)
 
-    def _load_data(self, symbol: str):
+    def _load_data(self, symbol: str, start, end):
         """
         Load a CSV file for a symbol into a pandas DataFrame with proper indexing.
 
@@ -71,4 +81,8 @@ class HistoricCSVDataHandler(BacktestDataHandler):
             index_col=0,
             parse_dates=True
         ).sort_index()
+        if start:
+            df = df.loc[start:]
+        if end:
+            df = df.loc[:end]
         return df

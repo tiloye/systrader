@@ -34,7 +34,7 @@ class TestSimBroker(unittest.TestCase):
         self.event_queue = Queue()
         self.data_handler = HistoricCSVDataHandler(
             csv_dir = CSV_DIR,
-            symbol_list = symbols
+            symbols = symbols
         )
         self.data_handler._add_event_queue(self.event_queue)
         

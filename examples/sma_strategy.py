@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     data_handler = HistoricCSVDataHandler(
         csv_dir=DATA_DIR,
-        symbol_list=SYMBOLS
+        symbols=SYMBOLS
     )
     sim_broker = SimBroker(
         data_handler=data_handler,

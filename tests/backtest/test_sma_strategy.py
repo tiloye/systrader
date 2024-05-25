@@ -35,7 +35,7 @@ class TestTraderBacktest(unittest.TestCase):
 
         cls.data_handler = HistoricCSVDataHandler(
             csv_dir=CSV_DIR,
-            symbol_list=SYMBOLS
+            symbols=SYMBOLS
         )
         cls.sim_broker = SimBroker(
             data_handler=cls.data_handler,

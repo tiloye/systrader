@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from margin_trader.event import MarketEvent
 
 
@@ -38,10 +39,14 @@ class BacktestDataHandler(DataHandler):
 
     Parameters
     ----------
-    symbol_list : list
+    symbols : list
         A list of symbols to backtest.
+    start_date : str or datetime
+        The start date of the backtest.
+    end_date : str or datetime
+        The end date of the backtest.
     add_label : list, optional
-        Additional labels to include in the data.
+        Additional columns to include in the data.
 
     Attributes
     ----------
@@ -51,9 +56,11 @@ class BacktestDataHandler(DataHandler):
         A dictionary to store the data for each symbol.
     latest_symbol_data : dict
         A dictionary to store the latest data for each symbol.
-    start_date : datetime or None
+    start_date : str or datetime
         The start date of the backtest.
-    current_datetime : datetime or None
+    end_date : str or datetime
+        The end date of the backtest.
+    current_datetime : str or datetime.
         The current datetime in the backtest.
     continue_backtest : bool
         A flag to indicate whether to continue the backtest.
@@ -63,12 +70,13 @@ class BacktestDataHandler(DataHandler):
         The event queue for the backtest.
     """
 
-    def __init__(self, symbol_list, add_label=None):
-        self.symbol_list = symbol_list
+    def __init__(self, symbols, start_date=None, end_date=None, add_label=None):
+        self.symbols = symbols
         self.symbol_data = {}
         self.latest_symbol_data = {}
-        self.start_date = None
-        self.current_datetime = None
+        self.start_date = start_date
+        self.end_date = end_date
+        self.current_datetime = start_date
         self.continue_backtest = True
         self.comb_index = None
         self.__ohlc = ["open", "high", "low", "close"]
@@ -83,8 +91,7 @@ class BacktestDataHandler(DataHandler):
         """Prepare dataset for backtest"""
         self._load_symbols()
         if self.comb_index is not None:
-            self.start_date = self.comb_index[0]
-            for symbol in self.symbol_list:
+            for symbol in self.symbols:
                 self.latest_symbol_data[symbol] = []
                 self.symbol_data[symbol] = self.symbol_data[symbol].reindex(
                     index=self.comb_index, method='pad'
@@ -99,8 +106,8 @@ class BacktestDataHandler(DataHandler):
             cols = self.__ohlc + labels
         else:
             cols = self.__ohlc
-        for symbol in self.symbol_list:
-            df = self._load_data(symbol)
+        for symbol in self.symbols:
+            df = self._load_data(symbol, self.start_date, self.end_date)
             df.columns = df.columns.str.lower()
             try:
                 df = df[cols]
@@ -120,7 +127,7 @@ class BacktestDataHandler(DataHandler):
             else:
                self.comb_index.union(self.symbol_data[symbol].index)
 
-    def _load_data(self, symbol: str):
+    def _load_data(self, symbol: str, start: str|datetime, end: str|datetime):
         """
         Load a data for a symbol into a pandas DataFrame with proper indexing.
         """

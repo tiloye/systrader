@@ -14,9 +14,9 @@ class TestHistoricalCSVDataHandler(unittest.TestCase):
         data = [
             ["2024-05-03", 100.0, 105.0, 98.0, 102.0, 0],
             ["2024-05-04", 102.0, 108.0, 100.0, 106.0, 0],
-            ["2024-05-07", 106.0, 110.0, 104.0, 108.0, 0],
-            ["2024-05-08", 108.0, 112.0, 106.0, 110.0, 0],
-            ["2024-05-09", 110.0, 115.0, 108.0, 112.0, 0]
+            ["2024-05-05", 106.0, 110.0, 104.0, 108.0, 0],
+            ["2024-05-06", 108.0, 112.0, 106.0, 110.0, 0],
+            ["2024-05-07", 110.0, 115.0, 108.0, 112.0, 0]
         ]
 
         with open(CSV_DIR/"AAPL.csv", "w") as csvfile:
@@ -32,18 +32,22 @@ class TestHistoricalCSVDataHandler(unittest.TestCase):
         self.symbols = ["AAPL"]
         self.bars = HistoricCSVDataHandler(
             csv_dir = CSV_DIR,
-            symbol_list = self.symbols
+            symbols = self.symbols,
+            start_date="2024-05-03",
+            end_date="2024-05-07"
         )
         self.bars._add_event_queue(self.event_queue)
     
     def test_initialisation(self):
         self.assertEqual(CSV_DIR, self.bars.csv_dir)
-        self.assertEqual(len(self.bars.latest_symbol_data), len(self.bars.symbol_list))
-        self.assertEqual(len(self.bars.symbol_list), len(self.bars.symbol_data))
-        self.assertEqual(self.bars.current_datetime, None)
+        self.assertEqual(len(self.bars.latest_symbol_data), len(self.bars.symbols))
+        self.assertEqual(len(self.bars.symbols), len(self.bars.symbol_data))
+        self.assertEqual(self.bars.current_datetime, self.bars.start_date)
+        self.assertEqual(self.bars.start_date, "2024-05-03")
+        self.assertEqual(self.bars.end_date, "2024-05-07")
 
     def test_empty_latest_bars(self):
-        symbol = self.bars.symbol_list[0]
+        symbol = self.bars.symbols[0]
         no_bar = self.bars.get_latest_bars(symbol)
         self.assertEqual(no_bar, [])
 
@@ -51,19 +55,19 @@ class TestHistoricalCSVDataHandler(unittest.TestCase):
         for i in range(5):
             self.bars.update_bars()
         self.assertEqual(len(self.bars.events.queue), 5)
-        self.assertEqual(self.bars.current_datetime.strftime("%Y-%m-%d"), "2024-05-09")
+        self.assertEqual(self.bars.current_datetime.strftime("%Y-%m-%d"), "2024-05-07")
 
     def test_latest_bars(self):
         for i in range(5):
             self.bars.update_bars()
-        symbol = self.bars.symbol_list[0]
+        symbol = self.bars.symbols[0]
         last_5_bars = self.bars.get_latest_bars(symbol=symbol, N=5)
         self.assertEqual(len(last_5_bars), 5)
     
     def test_get_latest_price(self):
         self.bars.update_bars()
         ohlc = ["open", "high", "low", "close"]
-        symbol = self.bars.symbol_list[0]
+        symbol = self.bars.symbols[0]
         bar = [
             self.bars.get_latest_price(symbol, price=price) for price in ohlc
         ]

@@ -69,6 +69,7 @@ class SimBroker(Broker):
         self._exec_price = exec_price
         self.pending_orders = Queue()
         self.account_history = []
+        self.__order_tracking_id = 0
 
     def _add_event_queue(self, event_queue):
         self.events = event_queue
@@ -107,7 +108,8 @@ class SimBroker(Broker):
                     event.units,
                     event.side,
                     price,
-                    self.commission
+                    self.commission,
+                    id=event.id
                 )
                 self.events.put(fill_event)
             else:
@@ -120,7 +122,8 @@ class SimBroker(Broker):
                     event.side,
                     price,
                     self.commission,
-                    "close"
+                    "close",
+                    event.id
             )
             self.events.put(fill_event)
 
@@ -143,13 +146,13 @@ class SimBroker(Broker):
         side = event.side
         position = self.p_manager.positions.get(symbol, False)
         if position:
-            if position.side != side:
+            if position.side != side and position.id == event.id:
                 return "CLOSE"
         return "OPEN"
             
     
     def buy(self, symbol: str,
-            order_type: str = "MKT", units: int|float = 100) -> None:
+            order_type: str = "MKT", units: int|float = 100, id=None) -> None:
         """
         Buy x units of symbol.
 
@@ -162,10 +165,10 @@ class SimBroker(Broker):
         units
             The number of units to buy, default is 100.
         """
-        self.__create_order(symbol, order_type, "BUY", units)
+        self.__create_order(symbol, order_type, "BUY", units, id)
 
     def sell(self, symbol: str,
-             order_type: str = "MKT", units: int|float = 100) -> None:
+             order_type: str = "MKT", units: int|float = 100, id=None) -> None:
         """
         Sell x units of symbol.
 
@@ -178,7 +181,7 @@ class SimBroker(Broker):
         units
             The number of units to sell, default is 100.
         """
-        self.__create_order(symbol, order_type, "SELL", units)
+        self.__create_order(symbol, order_type, "SELL", units, id)
 
     def close(self, symbol: str, units: int|float = 100) -> None:
         """
@@ -195,14 +198,14 @@ class SimBroker(Broker):
         if position:
             side = position.side
             if side == "BUY":
-                self.sell(symbol, units=units)
+                self.sell(symbol, units=units, id=position.id)
             else:
-                self.buy(symbol, units=units)
+                self.buy(symbol, units=units, id=position.id)
         else:
             print(f"There is no open position for {symbol}")
 
     def __create_order(self, symbol: str, order_type: str,
-                    side: str, units: int|float = 100) -> None:
+                    side: str, units: int|float = 100, id=None) -> None:
         """
         Create an order event.
 
@@ -219,6 +222,11 @@ class SimBroker(Broker):
         """
         order = OrderEvent(symbol, order_type=order_type,
                            units=units, side=side)
+        if id is not None:
+            order.id = id
+        else:
+            order.id = self.__order_tracking_id
+            self.__order_tracking_id += 1
         if order.order_type == "MKT":
             if self._exec_price == "current":
                 self.events.put(order)
@@ -438,7 +446,8 @@ class PositionManager:
                 units=event.units,
                 fill_price=event.fill_price,
                 commission=event.commission,
-                side=event.side
+                side=event.side,
+                id=event.id
         )
         
     def __close_position(self, event: FillEvent) -> None:
@@ -517,7 +526,8 @@ class Position:
             units: int|float,
             fill_price: float,
             commission: float|None,
-            side: str
+            side: str,
+            id: int
         ):
         self.symbol = symbol
         self.units = units
@@ -527,6 +537,7 @@ class Position:
         self.side = side
         self.open_time = timeindex
         self.pnl = 0
+        self.id = id
 
     def update_pnl(self) -> None:
         """Update the PnL of the position."""

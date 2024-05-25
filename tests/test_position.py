@@ -5,7 +5,7 @@ class TestPosition(unittest.TestCase):
 
     def setUp(self):
         self.position = Position(
-            "2024-05-06", "AAPL", 100, 150.0, 0.5, "BUY"
+            "2024-05-06", "AAPL", 100, 150.0, 0.5, "BUY", 0
         )
 
     def test_init(self):
@@ -16,6 +16,7 @@ class TestPosition(unittest.TestCase):
         self.assertEqual(self.position.commission, 0.5)
         self.assertEqual(self.position.side, "BUY")
         self.assertEqual(self.position.pnl, 0)
+        self.assertEqual(self.position.id, 0)
 
     def test_update_last_price(self):
         new_price = 160.0

@@ -13,7 +13,8 @@ class TestPositionManager(unittest.TestCase):
             units=100,
             side="BUY",
             fill_price=150.0,
-            commission=0.5
+            commission=0.5,
+            id=0
         )
         self.position = Position(
             self.event.timeindex,
@@ -21,7 +22,8 @@ class TestPositionManager(unittest.TestCase):
             self.event.units,
             self.event.fill_price,
             self.event.commission,
-            self.event.side
+            self.event.side,
+            self.event.id
         )
 
     def test_init(self):

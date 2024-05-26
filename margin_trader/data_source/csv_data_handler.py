@@ -29,7 +29,7 @@ class HistoricCSVDataHandler(BacktestDataHandler):
     ----------
     csv_dir : str
         Absolute directory path to the CSV files.
-    symbol_list : list
+    symbols : list
         A list of symbols to backtest.
     symbol_data : dict
         A dictionary to store the data for each symbol.
@@ -61,7 +61,7 @@ class HistoricCSVDataHandler(BacktestDataHandler):
         super().__init__(symbols=symbols, start_date=start_date,
                          end_date=end_date, add_label=add_label)
 
-    def _load_data(self, symbol: str, start, end):
+    def _load_data(self, symbol: str, start: str|datetime, end: str|datetime):
         """
         Load a CSV file for a symbol into a pandas DataFrame with proper indexing.
 

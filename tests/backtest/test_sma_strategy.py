@@ -8,6 +8,7 @@ from examples.sma_strategy import *
 CSV_DIR = Path(__file__).parent
 SYMBOLS = ["AAPL"]
 
+
 class TestTraderBacktest(unittest.TestCase):
 
     @classmethod
@@ -25,7 +26,7 @@ class TestTraderBacktest(unittest.TestCase):
             ["2024-05-10", 107.0, 111.0, 105.0, 108.0],  # SMA = 106.67 -> Hold
         ]
 
-        with open(CSV_DIR/"AAPL.csv", "w") as csvfile:
+        with open(CSV_DIR / "AAPL.csv", "w") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(
                 ["Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"]
@@ -33,23 +34,13 @@ class TestTraderBacktest(unittest.TestCase):
             for day in data:
                 writer.writerow(day)
 
-        cls.data_handler = HistoricCSVDataHandler(
-            csv_dir=CSV_DIR,
-            symbols=SYMBOLS
-        )
-        cls.sim_broker = SimBroker(
-            data_handler=cls.data_handler,
-            commission=0.0
-        )
+        cls.data_handler = HistoricCSVDataHandler(csv_dir=CSV_DIR, symbols=SYMBOLS)
+        cls.sim_broker = SimBroker(data_handler=cls.data_handler, commission=0.0)
         cls.strategy = SMAStrategy(
-            symbols=SYMBOLS,
-            data=cls.data_handler,
-            broker=cls.sim_broker
+            symbols=SYMBOLS, data=cls.data_handler, broker=cls.sim_broker
         )
         cls.trader = Trader(
-            data_handler=cls.data_handler,
-            broker=cls.sim_broker,
-            strategy=cls.strategy
+            data_handler=cls.data_handler, broker=cls.sim_broker, strategy=cls.strategy
         )
         cls.result = cls.trader._run_backtest()
 
@@ -66,18 +57,19 @@ class TestTraderBacktest(unittest.TestCase):
 
         self.assertEqual(len(pos_history), 3)
         self.assertEqual(pos_history.iloc[0].side, "SELL")
-        self.assertEqual(pos_history.iloc[0].open_time.strftime("%Y-%m-%d"),
-                         "2024-05-04")
-        self.assertEqual(pos_history.iloc[0].close_time.strftime("%Y-%m-%d"),
-                         "2024-05-06")
+        self.assertEqual(
+            pos_history.iloc[0].open_time.strftime("%Y-%m-%d"), "2024-05-04"
+        )
+        self.assertEqual(
+            pos_history.iloc[0].close_time.strftime("%Y-%m-%d"), "2024-05-06"
+        )
         self.assertEqual(pos_history.pnl.sum(), -1100.0)
         self.assertEqual(open_position.pnl, 100)
-        
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(CSV_DIR/"AAPL.csv"):
-            os.remove(CSV_DIR/"AAPL.csv")
+        if os.path.exists(CSV_DIR / "AAPL.csv"):
+            os.remove(CSV_DIR / "AAPL.csv")
 
 
 if __name__ == "__main__":

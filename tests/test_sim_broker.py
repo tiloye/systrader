@@ -10,6 +10,7 @@ from margin_trader.broker.sim_broker import SimBroker, PositionManager
 CSV_DIR = Path(__file__).parent
 symbols = ["AAPL"]
 
+
 class TestSimBroker(unittest.TestCase):
 
     @classmethod
@@ -19,10 +20,10 @@ class TestSimBroker(unittest.TestCase):
             ["2024-05-04", 102.0, 108.0, 100.0, 106.0, 106.0, 0],
             ["2024-05-05", 106.0, 110.0, 104.0, 108.0, 108.0, 0],
             ["2024-05-06", 108.0, 112.0, 106.0, 110.0, 110.0, 0],
-            ["2024-05-07", 110.0, 115.0, 108.0, 112.0, 112.0, 0]
+            ["2024-05-07", 110.0, 115.0, 108.0, 112.0, 112.0, 0],
         ]
 
-        with open(CSV_DIR/"AAPL.csv", "w") as csvfile:
+        with open(CSV_DIR / "AAPL.csv", "w") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(
                 ["Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"]
@@ -32,19 +33,14 @@ class TestSimBroker(unittest.TestCase):
 
     def setUp(self):
         self.event_queue = Queue()
-        self.data_handler = HistoricCSVDataHandler(
-            csv_dir = CSV_DIR,
-            symbols = symbols
-        )
+        self.data_handler = HistoricCSVDataHandler(csv_dir=CSV_DIR, symbols=symbols)
         self.data_handler._add_event_queue(self.event_queue)
-        
+
         self.broker = SimBroker(
-            balance = 100_000.0,
-            data_handler = self.data_handler,
-            commission = 0.5
+            balance=100_000.0, data_handler=self.data_handler, commission=0.5
         )
         self.broker._add_event_queue(self.event_queue)
-        self.data_handler.update_bars() # Add market event to the event queue
+        self.data_handler.update_bars()  # Add market event to the event queue
 
     def test_init(self):
         self.assertEqual(self.broker.balance, 100_000.0)
@@ -59,9 +55,8 @@ class TestSimBroker(unittest.TestCase):
         self.assertIsInstance(self.broker.pending_orders, Queue)
         self.assertListEqual(self.broker.account_history, [])
 
-
     def test_buy(self):
-        _ = self.event_queue.get(False) # Generate signal from market event
+        _ = self.event_queue.get(False)  # Generate signal from market event
         symbol = "AAPL"
         self.broker.buy(symbol)
         event = self.event_queue.get(False)
@@ -97,7 +92,9 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(fill_event.fill_price, 102.0)
 
     def test_execute_order_next_bar_open(self):
-        self.broker._exec_price = "next" # Change broker MKT execution price to next open
+        self.broker._exec_price = (
+            "next"  # Change broker MKT execution price to next open
+        )
         _ = self.event_queue.get(False)
         self.broker.buy("AAPL")
         self.broker.check_pending_orders()
@@ -115,7 +112,7 @@ class TestSimBroker(unittest.TestCase):
     def test_get_used_margin_no_positions(self):
         used_margin = self.broker.get_used_margin()
         self.assertEqual(used_margin, 0.0)
-    
+
     def test_get_used_margin_open_positions(self):
         _ = self.event_queue.get(False)
         self.broker.buy("AAPL")
@@ -144,8 +141,9 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(self.broker.equity, 100_000.0)
         self.assertEqual(self.broker.free_margin, 100_000.0)
         recent_acct_history = self.broker.account_history[-1]
-        self.assertEqual(recent_acct_history["timeindex"],
-                             self.data_handler.current_datetime)
+        self.assertEqual(
+            recent_acct_history["timeindex"], self.data_handler.current_datetime
+        )
         self.assertEqual(recent_acct_history["balance"], self.broker.balance)
         self.assertEqual(recent_acct_history["equity"], self.broker.equity)
 
@@ -161,7 +159,7 @@ class TestSimBroker(unittest.TestCase):
             {
                 "timeindex": self.data_handler.current_datetime,
                 "balance": 100_000.0,
-                "equity": 100_000
+                "equity": 100_000,
             }
         ]
 
@@ -190,8 +188,9 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(self.broker.free_margin, 90_199.5)
         self.assertNotEqual(self.broker.account_history, [])
         recent_acct_history = self.broker.account_history[-1]
-        self.assertEqual(recent_acct_history["timeindex"],
-                             self.data_handler.current_datetime)
+        self.assertEqual(
+            recent_acct_history["timeindex"], self.data_handler.current_datetime
+        )
         self.assertEqual(recent_acct_history["balance"], self.broker.balance)
         self.assertEqual(recent_acct_history["equity"], self.broker.equity)
 
@@ -214,21 +213,25 @@ class TestSimBroker(unittest.TestCase):
 
         self.assertNotIn("AAPL", self.broker.get_positions())
         self.assertEqual("AAPL", self.broker.get_positions_history()[-1].symbol)
-        self.assertEqual(self.broker.get_positions_history()[-1].close_time,
-                         self.data_handler.current_datetime)
+        self.assertEqual(
+            self.broker.get_positions_history()[-1].close_time,
+            self.data_handler.current_datetime,
+        )
         self.assertEqual(self.broker.balance, 100_399.0)
         self.assertEqual(self.broker.equity, 100_399.0)
         self.assertEqual(self.broker.free_margin, 100_399.0)
         self.assertNotEqual(self.broker.account_history, [])
         recent_acct_history = self.broker.account_history[-1]
-        self.assertEqual(recent_acct_history["timeindex"],
-                             self.data_handler.current_datetime)
+        self.assertEqual(
+            recent_acct_history["timeindex"], self.data_handler.current_datetime
+        )
         self.assertEqual(recent_acct_history["balance"], self.broker.balance)
         self.assertEqual(recent_acct_history["equity"], self.broker.equity)
 
-    
     def test_check_pending_orders(self):
-        self.broker._exec_price = "next" # Change broker MKT execution price to next open
+        self.broker._exec_price = (
+            "next"  # Change broker MKT execution price to next open
+        )
         _ = self.event_queue.get(False)
 
         self.broker.buy("AAPL")
@@ -255,9 +258,16 @@ class TestSimBroker(unittest.TestCase):
         self.broker.update_account(fill_event)
         account_history = self.broker.get_account_history()
         balance_equity_col = ["timeindex", "balance", "equity"]
-        positions_col = ["symbol", "units", "open_price",
-                         "close_price", "commission", "pnl", "open_time",
-                         "close_time"]
+        positions_col = [
+            "symbol",
+            "units",
+            "open_price",
+            "close_price",
+            "commission",
+            "pnl",
+            "open_time",
+            "close_time",
+        ]
 
         self.assertIn("balance_equity", account_history)
         self.assertIn("positions", account_history)
@@ -270,11 +280,10 @@ class TestSimBroker(unittest.TestCase):
             set(positions_col).issubset(account_history["positions"].columns)
         )
 
-    
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(CSV_DIR/"AAPL.csv"):
-            os.remove(CSV_DIR/"AAPL.csv")
+        if os.path.exists(CSV_DIR / "AAPL.csv"):
+            os.remove(CSV_DIR / "AAPL.csv")
 
 
 if __name__ == "__main__":

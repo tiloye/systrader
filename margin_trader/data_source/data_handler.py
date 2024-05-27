@@ -9,7 +9,7 @@ class DataHandler(ABC):
     all subsequent (inherited) data handlers (both live and historic).
 
     The goal of a (derived) DataHandler object is to output a generated
-    set of bars (OLHCVI) for each symbol requested. 
+    set of bars (OLHCVI) for each symbol requested.
 
     This will replicate how a live strategy would function as current
     market data would be sent "down the pipe". Thus a historic and live
@@ -31,7 +31,7 @@ class DataHandler(ABC):
         for all symbols in the symbol list.
         """
         raise NotImplementedError("Should implement update_bars()")
-    
+
 
 class BacktestDataHandler(DataHandler):
     """
@@ -70,11 +70,11 @@ class BacktestDataHandler(DataHandler):
     """
 
     def __init__(
-            self,
-            symbols: str|list[str],
-            start_date: str|datetime = None,
-            end_date: str|datetime = None,
-            use_cols: str|list[str] = None
+        self,
+        symbols: str | list[str],
+        start_date: str | datetime = None,
+        end_date: str | datetime = None,
+        use_cols: str | list[str] = None,
     ):
         self.symbols = symbols if isinstance(symbols, list) else [symbols]
         self.symbol_data = {}
@@ -99,9 +99,7 @@ class BacktestDataHandler(DataHandler):
         self._load_symbols()
         for symbol in self.symbols:
             self.latest_symbol_data[symbol] = []
-            self.symbol_data[symbol] = (
-                self.symbol_data[symbol].itertuples(name=symbol)
-            )
+            self.symbol_data[symbol] = self.symbol_data[symbol].itertuples(name=symbol)
 
     def _load_symbols(self):
         if self._extra_label:
@@ -124,12 +122,12 @@ class BacktestDataHandler(DataHandler):
                 )
                 continue
 
-    def _load_data(self, symbol: str, start: str|datetime, end: str|datetime):
+    def _load_data(self, symbol: str, start: str | datetime, end: str | datetime):
         """
         Load a data for a symbol into a pandas DataFrame with proper indexing.
         """
         raise NotImplementedError("Should implement loading symbol data from source")
-    
+
     def _get_new_bar(self, symbol: str):
         """
         Return the latest bar from the data feed as a named tuple.
@@ -145,7 +143,7 @@ class BacktestDataHandler(DataHandler):
             The latest bar for the symbol.
         """
         return next(self.symbol_data[symbol])
-            
+
     def get_latest_bars(self, symbol: str, N: int = 1):
         """
         Return the last N bars from the latest_symbol list, or N-k if less available.
@@ -178,7 +176,7 @@ class BacktestDataHandler(DataHandler):
         symbol
             The symbol to get the latest price for.
         price
-            The price type to return ("open", "high", "low", "close"), 
+            The price type to return ("open", "high", "low", "close"),
             by default "close".
 
         Returns
@@ -194,10 +192,10 @@ class BacktestDataHandler(DataHandler):
         elif price == "low":
             return latest_bar[0].low
         return latest_bar[0].close
-        
+
     def update_bars(self):
         """
-        Push the latest bar to the latest_symbol_data structure for all symbols 
+        Push the latest bar to the latest_symbol_data structure for all symbols
         successfully loaded in the symbol data.
         """
 

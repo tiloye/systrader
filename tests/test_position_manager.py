@@ -3,6 +3,7 @@ from margin_trader.event import FillEvent
 from margin_trader.broker.sim_broker import Position
 from margin_trader.broker.sim_broker import PositionManager
 
+
 class TestPositionManager(unittest.TestCase):
 
     def setUp(self):
@@ -14,7 +15,7 @@ class TestPositionManager(unittest.TestCase):
             side="BUY",
             fill_price=150.0,
             commission=0.5,
-            id=0
+            id=0,
         )
         self.position = Position(
             self.event.timeindex,
@@ -23,13 +24,13 @@ class TestPositionManager(unittest.TestCase):
             self.event.fill_price,
             self.event.commission,
             self.event.side,
-            self.event.id
+            self.event.id,
         )
 
     def test_init(self):
         self.assertDictEqual(self.manager.positions, {})
         self.assertListEqual(self.manager.history, [])
-    
+
     def test_update_position_from_fill_open(self):
         self.manager.update_position_from_fill(self.event)
         self.assertIn(self.position.symbol, self.manager.positions)

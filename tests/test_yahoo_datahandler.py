@@ -2,6 +2,7 @@ import unittest
 from queue import Queue
 from margin_trader.data_source import YahooDataHandler
 
+
 class TestYahooDataHandler(unittest.TestCase):
 
     @classmethod
@@ -9,13 +10,13 @@ class TestYahooDataHandler(unittest.TestCase):
         cls.event_queue = Queue()
         cls.symbols = "AAPL"
         cls.bars = YahooDataHandler(
-            symbols = cls.symbols,
-            start_date = "2024-05-06",
-            end_date = "2024-05-11",
-            use_cols="volume"
+            symbols=cls.symbols,
+            start_date="2024-05-06",
+            end_date="2024-05-11",
+            use_cols="volume",
         )
         cls.bars._add_event_queue(cls.event_queue)
-    
+
     def test_initialisation(self):
         self.assertIsInstance(self.bars.symbols, list)
         self.assertEqual(len(self.bars.latest_symbol_data), len(self.bars.symbols))
@@ -31,8 +32,7 @@ class TestYahooDataHandler(unittest.TestCase):
         self.assertEqual(len(self.bars.events.queue), 5)
         self.assertEqual(self.bars.current_datetime.strftime("%Y-%m-%d"), "2024-05-10")
         self.assertTupleEqual(
-            latest_bars[-1]._fields,
-            ("Index", "open", "high", "low", "close", "volume")
+            latest_bars[-1]._fields, ("Index", "open", "high", "low", "close", "volume")
         )
         self.assertAlmostEqual(latest_bars[-2].open, 182.31, 2)
         self.assertAlmostEqual(latest_bars[-2].high, 184.41, 2)

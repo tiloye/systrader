@@ -3,11 +3,12 @@ from margin_trader.data_source import HistoricCSVDataHandler
 from margin_trader.broker import SimBroker
 from margin_trader.trader import Trader
 
+
 class SMAStrategy(Strategy):
     window = 3
 
     def calculate_signals(self, event):
-        if event.type == 'MARKET':
+        if event.type == "MARKET":
             for s in self.symbols:
                 bars = self.data.get_latest_bars(s, N=self.window)
                 if bars is not None and len(bars) == self.window:
@@ -24,7 +25,7 @@ class SMAStrategy(Strategy):
                     else:
                         if signal is not None:
                             if signal == "BUY":
-                                    self.broker.buy(s)
+                                self.broker.buy(s)
                             else:
                                 self.broker.sell(s)
 
@@ -36,25 +37,16 @@ class SMAStrategy(Strategy):
             return "BUY"
         elif latest_close < ma and prev_close >= ma:
             return "SELL"
-        
+
+
 if __name__ == "__main__":
     SYMBOLS = ["AAPL"]
     DATA_DIR = "./data/"
 
-    data_handler = HistoricCSVDataHandler(
-        csv_dir=DATA_DIR,
-        symbols=SYMBOLS
-    )
-    sim_broker = SimBroker(
-        data_handler=data_handler,
-        commission=0.0
-    )
+    data_handler = HistoricCSVDataHandler(csv_dir=DATA_DIR, symbols=SYMBOLS)
+    sim_broker = SimBroker(data_handler=data_handler, commission=0.0)
     strategy = SMAStrategy(symbols=SYMBOLS, data=data_handler, broker=sim_broker)
-    trader = Trader(
-        data_handler=data_handler,
-        broker=sim_broker,
-        strategy=strategy
-    )
+    trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
     result = trader._run_backtest()
     print(result)
     trader.plot()

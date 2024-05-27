@@ -1,12 +1,11 @@
 import unittest
 from margin_trader.broker.sim_broker import Position
 
+
 class TestPosition(unittest.TestCase):
 
     def setUp(self):
-        self.position = Position(
-            "2024-05-06", "AAPL", 100, 150.0, 0.5, "BUY", 0
-        )
+        self.position = Position("2024-05-06", "AAPL", 100, 150.0, 0.5, "BUY", 0)
 
     def test_init(self):
         self.assertEqual(self.position.symbol, "AAPL")
@@ -24,8 +23,8 @@ class TestPosition(unittest.TestCase):
         self.assertEqual(self.position.last_price, new_price)
 
     def test_update_pnl_buy(self):
-        price_1 = 160.0 # In profit
-        price_2 = 140.0 # In loss
+        price_1 = 160.0  # In profit
+        price_2 = 140.0  # In loss
 
         self.position.update(price_1)
         self.assertEqual(self.position.pnl, 999.5)
@@ -35,8 +34,8 @@ class TestPosition(unittest.TestCase):
 
     def test_update_pnl_sell(self):
         self.position.side = "SELL"
-        price_1 = 140.0 # In profit
-        price_2 = 160.0 # In loss
+        price_1 = 140.0  # In profit
+        price_2 = 160.0  # In loss
 
         self.position.update(price_1)
         self.assertEqual(self.position.pnl, 999.5)
@@ -45,8 +44,8 @@ class TestPosition(unittest.TestCase):
         self.assertEqual(self.position.pnl, -1000.5)
 
     def test_pnl_on_buy_close(self):
-        price_1 = 160.0 # In profit
-        price_2 = 140.0 # In loss
+        price_1 = 160.0  # In profit
+        price_2 = 140.0  # In loss
         self.position.commission += self.position.commission
 
         self.position.update(price_1)
@@ -57,8 +56,8 @@ class TestPosition(unittest.TestCase):
 
     def test_pnl_on_sell_close(self):
         self.position.side = "SELL"
-        price_1 = 140.0 # In profit
-        price_2 = 160.0 # In loss
+        price_1 = 140.0  # In profit
+        price_2 = 160.0  # In loss
         self.position.commission += self.position.commission
 
         self.position.update(price_1)
@@ -73,6 +72,7 @@ class TestPosition(unittest.TestCase):
     def test_update_close_time(self):
         self.position.update_close_time("2024-05-07")
         self.assertEqual(self.position.close_time, "2024-05-07")
+
 
 if __name__ == "__main__":
     unittest.main()

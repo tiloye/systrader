@@ -39,13 +39,14 @@ class BacktestDataHandler(DataHandler):
 
     Parameters
     ----------
-    symbols : list
-        A list of symbols to backtest.
+    symbols : str or list
+        A list of symbols to backtest. If backtesting is only for one symbol,
+        symbols can be a string ("AAPL") or list (["AAPL"]).
     start_date : str or datetime
         The start date of the backtest.
     end_date : str or datetime
         The end date of the backtest.
-    add_label : list, optional
+    add_label : str or list, optional
         Additional columns to include in the data.
 
     Attributes
@@ -70,7 +71,17 @@ class BacktestDataHandler(DataHandler):
         The event queue for the backtest.
     """
 
-    def __init__(self, symbols, start_date=None, end_date=None, add_label=None):
+    def __init__(
+            self,
+            symbols: str|list[str],
+            start_date: str|datetime = None,
+            end_date: str|datetime = None,
+            add_label: str|list[str] = None
+    ):
+        if isinstance(symbols, str):
+            symbols = list(symbols)
+        if isinstance(add_label, str):
+            add_label = list(add_label)
         self.symbols = symbols
         self.symbol_data = {}
         self.latest_symbol_data = {}

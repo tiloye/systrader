@@ -22,7 +22,7 @@ class HistoricCSVDataHandler(BacktestDataHandler):
         The start date of the backtest.
     end_date : str or datetime
         The end date of the backtest.
-    add_label : list, optional
+    use_cols : list, optional
         Additional labels to include in the data.
 
     Attributes
@@ -55,11 +55,11 @@ class HistoricCSVDataHandler(BacktestDataHandler):
             symbols: list[str],
             start_date: str|datetime = None,
             end_date: str|datetime = None,
-            add_label: list[str]|None = None
+            use_cols: list[str]|None = None
             ):
         self.csv_dir = csv_dir
         super().__init__(symbols=symbols, start_date=start_date,
-                         end_date=end_date, add_label=add_label)
+                         end_date=end_date, use_cols=use_cols)
 
     def _load_data(self, symbol: str, start: str|datetime,
                    end: str|datetime) -> pd.DataFrame:

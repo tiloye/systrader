@@ -46,7 +46,7 @@ class BacktestDataHandler(DataHandler):
         The start date of the backtest.
     end_date : str or datetime
         The end date of the backtest.
-    add_label : str or list, optional
+    use_cols : str or list, optional
         Additional columns to include in the data.
 
     Attributes
@@ -65,8 +65,6 @@ class BacktestDataHandler(DataHandler):
         The current datetime in the backtest.
     continue_backtest : bool
         A flag to indicate whether to continue the backtest.
-    comb_index : pandas.Index or None
-        The combined index of all symbols' data.
     events : Queue
         The event queue for the backtest.
     """
@@ -76,22 +74,20 @@ class BacktestDataHandler(DataHandler):
             symbols: str|list[str],
             start_date: str|datetime = None,
             end_date: str|datetime = None,
-            add_label: str|list[str] = None
+            use_cols: str|list[str] = None
     ):
-        if isinstance(symbols, str):
-            symbols = list(symbols)
-        if isinstance(add_label, str):
-            add_label = list(add_label)
-        self.symbols = symbols
+        self.symbols = symbols if isinstance(symbols, list) else [symbols]
         self.symbol_data = {}
         self.latest_symbol_data = {}
         self.start_date = start_date
         self.end_date = end_date
         self.current_datetime = start_date
         self.continue_backtest = True
-        self.comb_index = None
-        self.__ohlc = ["open", "high", "low", "close"]
-        self.__extra_label = add_label
+        self._ohlc = ["open", "high", "low", "close"]
+        if use_cols:
+            self._extra_label = use_cols if isinstance(use_cols, list) else [use_cols]
+        else:
+            self._extra_label = use_cols
 
         self._prepare_data()
 
@@ -101,22 +97,18 @@ class BacktestDataHandler(DataHandler):
     def _prepare_data(self):
         """Prepare dataset for backtest"""
         self._load_symbols()
-        if self.comb_index is not None:
-            for symbol in self.symbols:
-                self.latest_symbol_data[symbol] = []
-                self.symbol_data[symbol] = self.symbol_data[symbol].reindex(
-                    index=self.comb_index, method='pad'
-                )
-                self.symbol_data[symbol] = (
-                    self.symbol_data[symbol].itertuples(name=symbol)
-                )
+        for symbol in self.symbols:
+            self.latest_symbol_data[symbol] = []
+            self.symbol_data[symbol] = (
+                self.symbol_data[symbol].itertuples(name=symbol)
+            )
 
     def _load_symbols(self):
-        if self.__extra_label:
-            labels = [label.lower() for label in self.__extra_label]
-            cols = self.__ohlc + labels
+        if self._extra_label:
+            labels = [label.lower() for label in self._extra_label]
+            cols = self._ohlc + labels
         else:
-            cols = self.__ohlc
+            cols = self._ohlc
         for symbol in self.symbols:
             df = self._load_data(symbol, self.start_date, self.end_date)
             df.columns = df.columns.str.lower()
@@ -131,12 +123,6 @@ class BacktestDataHandler(DataHandler):
                     """
                 )
                 continue
-
-             # Combine the index to pad forward values
-            if self.comb_index is None:
-                self.comb_index = self.symbol_data[symbol].index
-            else:
-               self.comb_index.union(self.symbol_data[symbol].index)
 
     def _load_data(self, symbol: str, start: str|datetime, end: str|datetime):
         """

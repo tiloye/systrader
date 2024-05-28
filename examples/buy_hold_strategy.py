@@ -39,6 +39,6 @@ if __name__ == "__main__":
     sim_broker = SimBroker(data_handler=data_handler, commission=0.0)
     strategy = BuyAndHoldStrategy(symbols=SYMBOLS, data=data_handler, broker=sim_broker)
     trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
-    result = trader._run_backtest()
+    result = trader.run()
     print(result)
     trader.plot()

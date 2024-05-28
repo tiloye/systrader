@@ -2,6 +2,8 @@ import queue
 import margin_trader.performance as perf
 import matplotlib.pyplot as plt
 import pandas as pd
+from margin_trader.data_source import BacktestDataHandler
+from margin_trader.broker import SimBroker
 
 
 class Trader:
@@ -47,6 +49,21 @@ class Trader:
                             self.broker.update_account(event)
         result = self._output_performance()
         return result
+
+    def _run_live(self, **kwargs):
+        pass
+
+    def run(self, **kwargs) -> pd.Series | None:
+        if self._is_backtest():
+            return self._run_backtest()
+        else:
+            return self._run_live()
+
+    def _is_backtest(self):
+        if isinstance(self.data_handler, BacktestDataHandler) and isinstance(
+            self.broker, SimBroker
+        ):
+            return True
 
     def _output_performance(self) -> pd.Series:
         """Output the strategy performance from the backtest."""

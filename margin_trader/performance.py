@@ -209,7 +209,7 @@ def calculate_expectancy(position_outcome: pd.Series) -> float:
     avg_win = position_outcome.loc[position_outcome > 0].mean()
     avg_loss = -1 * position_outcome.loc[position_outcome < 0].mean()
     win_perc = calculate_win_rate(position_outcome)
-    loss_perc = 1 - win_perc
+    loss_perc = 1 - win_perc if not None else 0.0
     return win_perc * avg_win - loss_perc * avg_loss
 
 
@@ -229,4 +229,6 @@ def calculate_profit_factor(position_outcome: pd.Series) -> float:
     """
     gross_win = position_outcome.loc[position_outcome > 0].sum()
     gross_loss = -1 * position_outcome.loc[position_outcome < 0].sum()
-    return gross_win / gross_loss
+    if gross_loss > 0:
+        return gross_win/gross_loss
+    return gross_win

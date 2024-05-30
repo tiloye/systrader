@@ -209,6 +209,7 @@ class BacktestDataHandler(DataHandler):
                     if bar is not None:
                         self.latest_symbol_data[s].append(bar)
                         self.current_datetime = bar.Index
-            self.events.put(MarketEvent())
+            if self.continue_backtest:
+                self.events.put(MarketEvent())
         else:
             print("The data history has no symbols.")

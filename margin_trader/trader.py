@@ -17,47 +17,54 @@ class Trader:
         self.strategy = strategy
         self.strategy._add_event_queue(self.events)
 
+    def _handle_events(self) -> None:
+        # Handle the events
+        while True:
+            try:
+                event = self.events.get(False)
+            except queue.Empty:
+                break
+            else:
+                if event is not None:
+                    if event.type == "MARKET":
+                        self.broker.check_pending_orders()
+                        self.strategy.calculate_signals(event)
+                        self.broker.update_account(event)
+                    elif event.type == "ORDER":
+                        self.broker.execute_order(event)
+                    elif event.type == "FILL":
+                        self.broker.update_account(event)
+
     def _run_backtest(self):
         """Execute the strategy in an event loop."""
 
         while True:
             # Update the bars (specific backtest code, as opposed to live trading)
             self.data_handler.update_bars()
-            if self.data_handler.continue_backtest == True:
+            if self.data_handler.continue_backtest:
                 pass
             else:
+                # Close all open positions
+                self.broker.close_all_positions()
+                self._handle_events()
+
+                # Get backtest result
                 self.account_history = self.broker.get_account_history()
                 self.balance_equity = self.account_history["balance_equity"]
+                self.position_history = self.account_history["positions"]
                 self.equity_rets = self.balance_equity.equity.pct_change().fillna(0)
+                self.backtest_result = self._output_performance()
                 break
-
-            # Handle the events
-            while True:
-                try:
-                    event = self.events.get(False)
-                except queue.Empty:
-                    break
-                else:
-                    if event is not None:
-                        if event.type == "MARKET":
-                            self.broker.check_pending_orders()
-                            self.strategy.calculate_signals(event)
-                            self.broker.update_account(event)
-                        elif event.type == "ORDER":
-                            self.broker.execute_order(event)
-                        elif event.type == "FILL":
-                            self.broker.update_account(event)
-        result = self._output_performance()
-        return result
+            self._handle_events()
 
     def _run_live(self, **kwargs):
         pass
 
     def run(self, **kwargs) -> pd.Series | None:
         if self._is_backtest():
-            return self._run_backtest()
+            self._run_backtest()
         else:
-            return self._run_live()
+            self._run_live()
 
     def _is_backtest(self):
         if isinstance(self.data_handler, BacktestDataHandler) and isinstance(
@@ -81,6 +88,9 @@ class Trader:
             "Longest drawdown period": perf.calculate_longest_dd_period(
                 self.equity_rets
             ),
+            "Win Rate": perf.calculate_win_rate(self.position_history.pnl),
+            "Expectancy": perf.calculate_expectancy(self.position_history.pnl),
+            "Profit factor": perf.calculate_profit_factor(self.position_history.pnl),
         }
         perf_measures = pd.Series(perf_measures)
         return perf_measures

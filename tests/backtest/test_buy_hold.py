@@ -37,7 +37,8 @@ class TestTraderBacktest(unittest.TestCase):
         cls.trader = Trader(
             data_handler=cls.data_handler, broker=cls.sim_broker, strategy=cls.strategy
         )
-        cls.result = cls.trader.run()
+        cls.trader.run()
+        cls.result = cls.trader.backtest_result
 
     def test_init(self):
         self.assertTrue(hasattr(self.trader, "events"))
@@ -50,7 +51,9 @@ class TestTraderBacktest(unittest.TestCase):
         rets = data.Close.pct_change().fillna(0.0)
         cum_rets = rets.add(1).cumprod().sub(1)
         starting_position_value = 10200.0
-        equity = cum_rets.mul(starting_position_value).add(self.sim_broker.balance)
+        equity = cum_rets.mul(starting_position_value).add(
+            self.trader.balance_equity.balance.iloc[0]
+        )
         equity_ret = equity.pct_change().fillna(0.0)
         total_ret = (equity_ret.add(1).prod() - 1) * 100
         ann_ret = (equity_ret.add(1).prod() ** (252 / len(equity_ret)) - 1) * 100

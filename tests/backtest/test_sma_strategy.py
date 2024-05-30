@@ -42,7 +42,8 @@ class TestTraderBacktest(unittest.TestCase):
         cls.trader = Trader(
             data_handler=cls.data_handler, broker=cls.sim_broker, strategy=cls.strategy
         )
-        cls.result = cls.trader.run()
+        cls.trader.run()
+        cls.result = cls.trader.backtest_result
 
     def test_init(self):
         self.assertTrue(hasattr(self.trader, "events"))
@@ -53,9 +54,9 @@ class TestTraderBacktest(unittest.TestCase):
     def test_positions(self):
         account_history = self.trader.account_history
         pos_history = account_history["positions"]
-        open_position = self.trader.broker.get_position("AAPL")
+        # open_position = self.trader.broker.get_position("AAPL")
 
-        self.assertEqual(len(pos_history), 3)
+        self.assertEqual(len(pos_history), 4)
         self.assertEqual(pos_history.iloc[0].side, "SELL")
         self.assertEqual(
             pos_history.iloc[0].open_time.strftime("%Y-%m-%d"), "2024-05-04"
@@ -63,8 +64,8 @@ class TestTraderBacktest(unittest.TestCase):
         self.assertEqual(
             pos_history.iloc[0].close_time.strftime("%Y-%m-%d"), "2024-05-06"
         )
-        self.assertEqual(pos_history.pnl.sum(), -1100.0)
-        self.assertEqual(open_position.pnl, 100)
+        self.assertEqual(pos_history.pnl.sum(), -1000.0)
+        # self.assertEqual(open_position.pnl, 100)
 
     @classmethod
     def tearDownClass(cls):

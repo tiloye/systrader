@@ -280,6 +280,58 @@ class TestSimBroker(unittest.TestCase):
             set(positions_col).issubset(account_history["positions"].columns)
         )
 
+    def test_close_all_open_positions_exec_current(self):
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+        self.broker.buy("AAPL")
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account(fill_event)
+        self.data_handler.update_bars()
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+        self.data_handler.continue_backtest = False
+        self.broker.close_all_positions()
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account(fill_event)
+        closed_position = self.broker.get_positions_history()[-1]
+
+        self.assertDictEqual(self.broker.get_positions(), {})
+        self.assertEqual(closed_position.pnl, 399.0)
+        self.assertEqual(closed_position.open_time.strftime("%Y-%m-%d"), "2024-05-03")
+        self.assertEqual(closed_position.close_time.strftime("%Y-%m-%d"), "2024-05-04")
+
+    def test_close_all_open_positions_exec_next(self):
+        self.broker._exec_price = (
+            "next"  # Change broker MKT execution price to next open
+        )
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+        self.broker.buy("AAPL")
+        self.broker.check_pending_orders()
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account(fill_event)
+        self.data_handler.update_bars()
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+        self.data_handler.continue_backtest = False
+        self.broker.close_all_positions()
+        order_event = self.event_queue.get(False)
+        self.broker.execute_order(order_event)
+        fill_event = self.event_queue.get(False)
+        self.broker.update_account(fill_event)
+        closed_position = self.broker.get_positions_history()[-1]
+
+        self.assertDictEqual(self.broker.get_positions(), {})
+        self.assertEqual(closed_position.pnl, 599.0)
+        self.assertEqual(closed_position.open_time.strftime("%Y-%m-%d"), "2024-05-03")
+        self.assertEqual(closed_position.close_time.strftime("%Y-%m-%d"), "2024-05-04")
+
     @classmethod
     def tearDownClass(cls):
         if os.path.exists(CSV_DIR / "AAPL.csv"):

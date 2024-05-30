@@ -196,7 +196,7 @@ class SimBroker(Broker):
         units
             The number of units to close, default is 100.
         """
-        position = self.p_manager.positions.get(symbol, False)
+        position = self.get_position(symbol)
         if position:
             side = position.side
             if side == "BUY":
@@ -205,6 +205,20 @@ class SimBroker(Broker):
                 self.buy(symbol, units=units, id=position.id)
         else:
             print(f"There is no open position for {symbol}")
+
+    def close_all_positions(self) -> None:
+        """Close all open positions."""
+        positions = self.get_positions()
+        if positions:
+            if self.data_handler.continue_backtest:
+                for symbol in positions:
+                    self.close(symbol)
+            else:
+                self._exec_price = (
+                    "current" if self._exec_price == "next" else self._exec_price
+                )
+                for symbol in positions:
+                    self.close(symbol)
 
     def __create_order(
         self, symbol: str, order_type: str, side: str, units: int | float = 100, id=None

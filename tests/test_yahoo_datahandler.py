@@ -40,6 +40,22 @@ class TestYahooDataHandler(unittest.TestCase):
         self.assertAlmostEqual(latest_bars[-2].close, 184.32, 2)
         self.assertAlmostEqual(latest_bars[-2].volume, 49_049_437.45, 0)
 
+    def test_invalid_symbol(self):
+        with self.assertRaises(ValueError):
+            YahooDataHandler(
+                symbols=["INVALID_SYMBOL"],
+                start_date="2024-05-06",
+                end_date="2024-05-11",
+                use_cols=["volume"],
+            )
+        with self.assertRaises(ValueError):
+            YahooDataHandler(
+                symbols=["INVALID_SYMBOL1", "INVALID_SYMBOL2"],
+                start_date="2024-05-06",
+                end_date="2024-05-11",
+                use_cols=["volume"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

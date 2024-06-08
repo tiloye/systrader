@@ -3,7 +3,7 @@ import pandas as pd
 import empyrical as emp
 
 
-def calculate_total_return(returns: pd.Series | np.ndarray) -> float:
+def total_return(returns: pd.Series | np.ndarray) -> float:
     """Calculate the total return on investment (ROI) from a series of returns.
 
     Parameters
@@ -22,9 +22,7 @@ def calculate_total_return(returns: pd.Series | np.ndarray) -> float:
     return roi
 
 
-def calculate_annual_return(
-    returns: pd.Series | np.ndarray, periods: int = 252
-) -> float:
+def annual_return(returns: pd.Series | np.ndarray, periods: int = 252) -> float:
     """Calculate the annualized return of a series of returns.
 
     This function computes the compounded annual growth rate (CAGR) of the
@@ -52,9 +50,7 @@ def calculate_annual_return(
     return emp.annual_return(returns, annualization=periods)
 
 
-def calculate_annual_volatility(
-    returns: pd.Series | np.ndarray, periods: int = 252
-) -> float:
+def annual_volatility(returns: pd.Series | np.ndarray, periods: int = 252) -> float:
     """Calculate the annualized volatility of a series of returns.
 
     Parameters
@@ -79,7 +75,7 @@ def calculate_annual_volatility(
     return emp.annual_volatility(returns, annualization=periods)
 
 
-def calculate_sharpe_ratio(
+def sharpe_ratio(
     returns: pd.Series | np.ndarray, rf: float = 0.0, periods: int = 252
 ) -> float:
     """Calculate the Sharpe ratio of a strategy or investment returns.
@@ -111,7 +107,7 @@ def calculate_sharpe_ratio(
     return emp.sharpe_ratio(returns, risk_free=rf, annualization=periods)
 
 
-def calculate_max_drawdown(returns: pd.Series | np.ndarray) -> float:
+def max_drawdown(returns: pd.Series | np.ndarray) -> float:
     """Calculate the maximum drawdown experienced by a series of returns.
 
     Parameters
@@ -129,7 +125,7 @@ def calculate_max_drawdown(returns: pd.Series | np.ndarray) -> float:
     return emp.max_drawdown(returns)
 
 
-def calculate_var(returns: pd.Series | np.ndarray) -> float:
+def var(returns: pd.Series | np.ndarray) -> float:
     """Calculate the Value at Risk (VaR) for a series of returns.
 
     Parameters
@@ -147,7 +143,7 @@ def calculate_var(returns: pd.Series | np.ndarray) -> float:
     return emp.value_at_risk(returns)
 
 
-def calculate_longest_dd_period(returns: pd.Series | np.ndarray) -> int:
+def longest_dd_period(returns: pd.Series | np.ndarray) -> int:
     """Find the duration of the longest drawdown period in a return series.
 
     Parameters
@@ -171,7 +167,7 @@ def calculate_longest_dd_period(returns: pd.Series | np.ndarray) -> int:
     return max(duration)
 
 
-def calculate_win_rate(position_outcome: pd.Series) -> float:
+def win_rate(position_outcome: pd.Series) -> float:
     """Calcuate the percentage difference between
     number of losing trades and winnig trades
 
@@ -191,7 +187,7 @@ def calculate_win_rate(position_outcome: pd.Series) -> float:
     return win_rate
 
 
-def calculate_expectancy(position_outcome: pd.Series) -> float:
+def expectancy(position_outcome: pd.Series) -> float:
     """Calculate the expectancy (average profit per trade)
     based on win rate, average win size, and average loss size.
 
@@ -210,12 +206,12 @@ def calculate_expectancy(position_outcome: pd.Series) -> float:
     avg_win = avg_win if not pd.isna(avg_win) else 0.0
     avg_loss = -1 * position_outcome.loc[position_outcome < 0].mean()
     avg_loss = avg_loss if not pd.isna(avg_loss) else 0.0
-    win_perc = calculate_win_rate(position_outcome)
+    win_perc = win_rate(position_outcome)
     loss_perc = 1 - win_perc
     return win_perc * avg_win - loss_perc * avg_loss
 
 
-def calculate_profit_factor(position_outcome: pd.Series) -> float:
+def profit_factor(position_outcome: pd.Series) -> float:
     """Calculates the profit factor(ratio of average win size to average loss size).
 
     Parameters

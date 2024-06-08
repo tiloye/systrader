@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-import margin_trader.performance as perf
+import margin_trader.performance.metric as perf
 
 
 class TestPerformance(unittest.TestCase):
@@ -23,52 +23,52 @@ class TestPerformance(unittest.TestCase):
         self.returns = self.data.pct_change().fillna(0.0)
 
     def test_calculate_total_return(self):
-        gross_return = perf.calculate_total_return(self.returns)
+        gross_return = perf.total_return(self.returns)
         gross_return = round(gross_return, 4)
         self.assertEqual(gross_return, 0.1200)
 
     def test_calculate_annual_return(self):
-        ann_ret = perf.calculate_annual_return(self.returns)
+        ann_ret = perf.annual_return(self.returns)
         ann_ret = round(ann_ret, 4)
         self.assertEqual(ann_ret, 16.3898)
 
     def test_calculate_annual_volatility(self):
-        ann_vol = perf.calculate_annual_volatility(self.returns)
+        ann_vol = perf.annual_volatility(self.returns)
         ann_vol = round(ann_vol, 4)
         self.assertEqual(ann_vol, 0.6686)
 
     def test_calculate_max_drawdown(self):
-        dd = perf.calculate_max_drawdown(self.returns)
+        dd = perf.max_drawdown(self.returns)
         dd = round(dd, 4)
         self.assertEqual(dd, -0.0755)
 
     def test_calculate_longest_drawdown_period(self):
-        dd_duration = perf.calculate_longest_dd_period(self.returns)
+        dd_duration = perf.longest_dd_period(self.returns)
         self.assertEqual(dd_duration, 6)
 
     def test_calculate_sharpe_ratio(self):
-        sr = perf.calculate_sharpe_ratio(self.returns)
+        sr = perf.sharpe_ratio(self.returns)
         sr = round(sr, 4)
         self.assertEqual(round(sr, 4), 4.5939)
 
     def test_calculate_var(self):
-        var = perf.calculate_var(self.returns)
+        var = perf.var(self.returns)
         var = round(var, 4)
         self.assertEqual(var, -0.0390)
 
     def test_calculate_win_rate(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
-        win_rate = perf.calculate_win_rate(self.data)
+        win_rate = perf.win_rate(self.data)
         self.assertEqual(win_rate, 0.7)
 
     def test_calculate_expectancy(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
-        expectancy = perf.calculate_expectancy(self.data)
+        expectancy = perf.expectancy(self.data)
         self.assertAlmostEqual(expectancy, 41.0)
 
     def test_calcualte_profit_factor(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
-        pfactor = perf.calculate_profit_factor(self.data)
+        pfactor = perf.profit_factor(self.data)
         self.assertAlmostEqual(pfactor, 2.3099, 4)
 
 

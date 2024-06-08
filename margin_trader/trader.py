@@ -1,5 +1,5 @@
 import queue
-import margin_trader.performance as perf
+import margin_trader.performance.metric as perf
 import matplotlib.pyplot as plt
 import pandas as pd
 from margin_trader.data_source import BacktestDataHandler
@@ -76,21 +76,21 @@ class Trader:
         """Output the strategy performance from the backtest."""
 
         perf_measures = {
-            "Total Return": perf.calculate_total_return(self.equity_rets) * 100,
-            "Annual Return": perf.calculate_annual_return(self.equity_rets) * 100,
-            "Volatiliy": perf.calculate_annual_volatility(self.equity_rets, periods=1)
+            "Total Return": perf.total_return(self.equity_rets) * 100,
+            "Annual Return": perf.annual_return(self.equity_rets) * 100,
+            "Volatiliy": perf.annual_volatility(self.equity_rets, periods=1)
             * 100,
-            "Annual Volatility": perf.calculate_annual_volatility(self.equity_rets)
+            "Annual Volatility": perf.annual_volatility(self.equity_rets)
             * 100,
-            "Sharpe ratio": perf.calculate_sharpe_ratio(self.equity_rets),
-            "Maximum drawdown": perf.calculate_max_drawdown(self.equity_rets) * 100,
-            "VaR": perf.calculate_var(self.equity_rets) * 100,
-            "Longest drawdown period": perf.calculate_longest_dd_period(
+            "Sharpe ratio": perf.sharpe_ratio(self.equity_rets),
+            "Maximum drawdown": perf.max_drawdown(self.equity_rets) * 100,
+            "VaR": perf.var(self.equity_rets) * 100,
+            "Longest drawdown period": perf.longest_dd_period(
                 self.equity_rets
             ),
-            "Win Rate": perf.calculate_win_rate(self.position_history.pnl),
-            "Expectancy": perf.calculate_expectancy(self.position_history.pnl),
-            "Profit factor": perf.calculate_profit_factor(self.position_history.pnl),
+            "Win Rate": perf.win_rate(self.position_history.pnl),
+            "Expectancy": perf.expectancy(self.position_history.pnl),
+            "Profit factor": perf.profit_factor(self.position_history.pnl),
         }
         perf_measures = pd.Series(perf_measures)
         return perf_measures

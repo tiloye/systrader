@@ -72,6 +72,21 @@ class TestPosition(unittest.TestCase):
     def test_update_close_time(self):
         self.position.update_close_time("2024-05-07")
         self.assertEqual(self.position.close_time, "2024-05-07")
+    
+    def test_add_postion(self):
+        self.position.add_position(160.0, 50)
+        
+        self.assertAlmostEqual(self.position.fill_price, 153.33, 2)
+        self.assertEqual(self.position.units, 150)
+        self.assertEqual(self.position.last_price, 160.0)
+        self.assertAlmostEqual(self.position.pnl, 999.50, 2)
+
+    def test_reduce_position(self):
+        self.position.reduce_position(160.0, 50)
+
+        self.assertEqual(self.position.units, 50)
+        self.assertEqual(self.position.last_price, 160.0)
+        self.assertEqual(self.position.pnl, 499.5)
 
 
 if __name__ == "__main__":

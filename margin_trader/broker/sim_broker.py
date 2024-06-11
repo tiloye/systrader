@@ -1,5 +1,6 @@
 import pandas as pd
 from datetime import datetime
+from copy import deepcopy
 from queue import Queue
 from margin_trader.broker import Broker
 from margin_trader.data_source import DataHandler
@@ -114,7 +115,12 @@ class SimBroker(Broker):
                 )
                 self.events.put(fill_event)
             else:
-                print("Order rejected; not enough margin")
+                print(
+                    f"{event.side} order rejected for {event.symbol}: "
+                    + f"Insufficient margin. Order cost: {cost:.2f}, "
+                    + f"Free margin: {self.free_margin:.2f}."
+                )
+
         else:
             fill_event = FillEvent(
                 self.data_handler.current_datetime,
@@ -146,9 +152,8 @@ class SimBroker(Broker):
         symbol = event.symbol
         side = event.side
         position = self.p_manager.positions.get(symbol, False)
-        if position:
-            if position.side != side and position.id == event.id:
-                return "CLOSE"
+        if position and position.side != side and position.id == event.id:
+            return "CLOSE"
         return "OPEN"
 
     def buy(
@@ -212,13 +217,13 @@ class SimBroker(Broker):
         if positions:
             if self.data_handler.continue_backtest:
                 for symbol in positions:
-                    self.close(symbol)
+                    self.close(symbol, units=positions[symbol].units)
             else:
                 self._exec_price = (
                     "current" if self._exec_price == "next" else self._exec_price
                 )
                 for symbol in positions:
-                    self.close(symbol)
+                    self.close(symbol, units=positions[symbol].units)
 
     def __create_order(
         self, symbol: str, order_type: str, side: str, units: int | float = 100, id=None
@@ -250,7 +255,7 @@ class SimBroker(Broker):
                 order.status = "PENDING"
                 self.pending_orders.put(order)
         else:
-            raise NotImplementedError(f"Cannot create {order.order_type}.")
+            raise NotImplementedError(f"Cannot create {order.order_type} order.")
 
     def check_pending_orders(self):
         """Check if there are pending orders and add them to the event queue."""
@@ -454,15 +459,19 @@ class PositionManager:
         event
             The fill event to open a position from.
         """
-        self.positions[event.symbol] = Position(
-            timeindex=event.timeindex,
-            symbol=event.symbol,
-            units=event.units,
-            fill_price=event.fill_price,
-            commission=event.commission,
-            side=event.side,
-            id=event.id,
-        )
+        position = self.positions.get(event.symbol, False)
+        if position:
+            position.add_position(event.fill_price, event.units)
+        else:
+            self.positions[event.symbol] = Position(
+                timeindex=event.timeindex,
+                symbol=event.symbol,
+                units=event.units,
+                fill_price=event.fill_price,
+                commission=event.commission,
+                side=event.side,
+                id=event.id,
+            )
 
     def __close_position(self, event: FillEvent) -> None:
         """
@@ -473,11 +482,25 @@ class PositionManager:
         event
             The fill event to close a position from.
         """
-        self.positions[event.symbol].commission += event.commission  # openNclose fee
-        self.positions[event.symbol].update(event.fill_price)
-        self.positions[event.symbol].update_close_time(event.timeindex)
-        self.history.append(self.positions[event.symbol])
-        del self.positions[event.symbol]
+        position = self.positions.get(event.symbol)
+
+        def add_to_history(c_position, event):
+            c_position.commission += event.commission
+            c_position.update(event.fill_price)
+            c_position.update_close_time(event.timeindex)
+            self.history.append(c_position)
+
+        if event.units < position.units:
+            open_units = position.units - event.units
+            partial_position = deepcopy(position)
+            partial_position.reduce_position(
+                event.fill_price, position.units - open_units
+            )
+            position.reduce_position(event.fill_price, event.units)
+            add_to_history(partial_position, event)
+        else:
+            add_to_history(position, event)
+            del self.positions[event.symbol]
 
     def get_total_pnl(self) -> int:
         """
@@ -605,6 +628,19 @@ class Position:
             The cost of the position.
         """
         return self.fill_price * self.units
+
+    def add_position(self, price, units) -> None:
+        """Add more units to position."""
+        prev_price = self.fill_price
+        prev_units = self.units
+        curr_price = (prev_units * prev_price + units * price) / (prev_units + units)
+        self.fill_price = curr_price
+        self.units = prev_units + units
+        self.update(price)
+
+    def reduce_position(self, price, units):
+        self.units = self.units - units
+        self.update(price)
 
     def __repr__(self) -> str:
         """

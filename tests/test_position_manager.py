@@ -74,6 +74,43 @@ class TestPositionManager(unittest.TestCase):
         total_pnl = self.manager.get_total_pnl()
         self.assertEqual(total_pnl, 1499.0)
 
+    def test_add_to_existing_position(self):
+        self.manager.update_position_from_fill(self.event)
+        new_event = FillEvent(
+            timeindex="2024-05-07",
+            symbol="AAPL",
+            units=50,
+            side="BUY",
+            fill_price=160.0,
+            commission=0.5,
+            id=0,
+        )
+        self.manager.update_position_from_fill(new_event)
+        position = self.manager.positions["AAPL"]
+        
+        self.assertEqual(position.units, 150.0)
+
+    def test_partial_close(self):
+        self.manager.update_position_from_fill(self.event)
+        new_event = FillEvent(
+            timeindex="2024-05-07",
+            symbol="AAPL",
+            units=50,
+            side="SELL",
+            fill_price=160.0,
+            commission=0.5,
+            result="close",
+            id=0,
+        )
+        self.manager.update_position_from_fill(new_event)
+        position = self.manager.positions["AAPL"]
+        hist_partial_close = self.manager.history[-1]
+
+        self.assertEqual(position.units, 50)
+        self.assertEqual(position.pnl, 499.5)
+        self.assertEqual(hist_partial_close.units, 50)
+        self.assertEqual(hist_partial_close.pnl, 499.0)
+
 
 if __name__ == "__main__":
     unittest.main()

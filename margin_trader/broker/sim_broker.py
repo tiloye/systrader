@@ -24,6 +24,9 @@ class SimBroker(Broker):
         The leverage for trading. Default is 1.
     commission : int or float, optional
         The commission for each trade. Default is None.
+    stop_out_level : float
+        The level for closing all positions when their isn't enough maintenance margin.
+        Default is 0.2 (20%)
     exec_price : str, optional
         The execution price for orders. Can be "current" (current close price)
         or "next" (next open price). Default is "current".
@@ -59,6 +62,7 @@ class SimBroker(Broker):
         balance: int | float = 100_000,
         leverage: int = 1,
         commission: None | int | float = None,
+        stop_out_level: float = 0.2,
         exec_price="current",
     ):
         self.balance = balance
@@ -72,6 +76,7 @@ class SimBroker(Broker):
         self.pending_orders = Queue()
         self.account_history = []
         self.__order_tracking_id = 0
+        self.__stop_out_level = stop_out_level
 
     def _add_event_queue(self, event_queue):
         self.events = event_queue
@@ -213,17 +218,20 @@ class SimBroker(Broker):
 
     def close_all_positions(self) -> None:
         """Close all open positions."""
+
+        def close_all(positions):
+            for symbol in positions:
+                self.close(symbol, units=positions[symbol].units)
+
         positions = self.get_positions()
         if positions:
             if self.data_handler.continue_backtest:
-                for symbol in positions:
-                    self.close(symbol, units=positions[symbol].units)
+                close_all(positions)
             else:
                 self._exec_price = (
                     "current" if self._exec_price == "next" else self._exec_price
                 )
-                for symbol in positions:
-                    self.close(symbol, units=positions[symbol].units)
+                close_all(positions)
 
     def __create_order(
         self, symbol: str, order_type: str, side: str, units: int | float = 100, id=None
@@ -283,6 +291,8 @@ class SimBroker(Broker):
         self.__update_equity(event)
         self.__update_free_margin()
         self.__update_account_history(event)
+        if self.__margin_call():
+            self._stop_simulation()
 
     def __update_positions(self, event: MarketEvent | FillEvent):
         """Update positions based on market or fill events."""
@@ -334,6 +344,20 @@ class SimBroker(Broker):
             if timeindex == recent_history["timeindex"]:
                 recent_history["balance"] = self.balance
                 recent_history["equity"] = self.equity
+
+    def __margin_call(self) -> bool:
+        try:
+            margin_level = self.equity / self.get_used_margin()
+        except ZeroDivisionError:
+            return False
+        else:
+            if margin_level <= self.__stop_out_level:
+                return True
+            return False
+
+    def _stop_simulation(self) -> None:
+        self.data_handler.continue_backtest = False
+        self.close_all_positions()
 
     def get_used_margin(self) -> float:
         """

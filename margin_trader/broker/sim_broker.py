@@ -586,7 +586,7 @@ class Position:
         symbol: str,
         units: int | float,
         fill_price: float,
-        commission: float | None,
+        commission: float,
         side: str,
         id: int,
     ):

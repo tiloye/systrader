@@ -1,16 +1,20 @@
-import unittest
 import csv
 import os
-import pandas as pd
+import unittest
 from pathlib import Path
-from examples.sma_strategy import *
+
+from examples.sma_strategy import (
+    HistoricCSVDataHandler,
+    SimBroker,
+    SMAStrategy,
+    Trader,
+)
 
 CSV_DIR = Path(__file__).parent
 SYMBOLS = ["AAPL"]
 
 
 class TestTraderBacktest(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         data = [

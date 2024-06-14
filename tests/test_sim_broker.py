@@ -1,18 +1,19 @@
-import os
 import csv
+import os
 import unittest
-import pandas as pd
 from pathlib import Path
 from queue import Queue
+
+import pandas as pd
+
+from margin_trader.broker.sim_broker import PositionManager, SimBroker
 from margin_trader.data_source import HistoricCSVDataHandler
-from margin_trader.broker.sim_broker import SimBroker, PositionManager
 
 CSV_DIR = Path(__file__).parent
 SYMBOLS = ["AAPL"]
 
 
 class TestSimBroker(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         data = [

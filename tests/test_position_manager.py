@@ -1,11 +1,10 @@
 import unittest
+
+from margin_trader.broker.sim_broker import Position, PositionManager
 from margin_trader.event import FillEvent
-from margin_trader.broker.sim_broker import Position
-from margin_trader.broker.sim_broker import PositionManager
 
 
 class TestPositionManager(unittest.TestCase):
-
     def setUp(self):
         self.manager = PositionManager()
         self.event = FillEvent(
@@ -87,7 +86,7 @@ class TestPositionManager(unittest.TestCase):
         )
         self.manager.update_position_from_fill(new_event)
         position = self.manager.positions["AAPL"]
-        
+
         self.assertEqual(position.units, 150.0)
 
     def test_partial_close(self):

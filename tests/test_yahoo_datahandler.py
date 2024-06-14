@@ -1,10 +1,10 @@
 import unittest
 from queue import Queue
+
 from margin_trader.data_source import YahooDataHandler
 
 
 class TestYahooDataHandler(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls) -> None:
         cls.event_queue = Queue()

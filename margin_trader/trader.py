@@ -1,13 +1,14 @@
 import queue
-import margin_trader.performance.metric as perf
+
 import matplotlib.pyplot as plt
 import pandas as pd
-from margin_trader.data_source import BacktestDataHandler
+
+import margin_trader.performance.metric as perf
 from margin_trader.broker import SimBroker
+from margin_trader.data_source import BacktestDataHandler
 
 
 class Trader:
-
     def __init__(self, data_handler, broker, strategy):
         self.events = queue.Queue()
         self.data_handler = data_handler
@@ -78,16 +79,12 @@ class Trader:
         perf_measures = {
             "Total Return": perf.total_return(self.equity_rets) * 100,
             "Annual Return": perf.annual_return(self.equity_rets) * 100,
-            "Volatiliy": perf.annual_volatility(self.equity_rets, periods=1)
-            * 100,
-            "Annual Volatility": perf.annual_volatility(self.equity_rets)
-            * 100,
+            "Volatiliy": perf.annual_volatility(self.equity_rets, periods=1) * 100,
+            "Annual Volatility": perf.annual_volatility(self.equity_rets) * 100,
             "Sharpe ratio": perf.sharpe_ratio(self.equity_rets),
             "Maximum drawdown": perf.max_drawdown(self.equity_rets) * 100,
             "VaR": perf.var(self.equity_rets) * 100,
-            "Longest drawdown period": perf.longest_dd_period(
-                self.equity_rets
-            ),
+            "Longest drawdown period": perf.longest_dd_period(self.equity_rets),
             "Win Rate": perf.win_rate(self.position_history.pnl),
             "Expectancy": perf.expectancy(self.position_history.pnl),
             "Profit factor": perf.profit_factor(self.position_history.pnl),

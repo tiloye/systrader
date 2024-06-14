@@ -1,6 +1,6 @@
-from margin_trader.strategy import Strategy
-from margin_trader.data_source import HistoricCSVDataHandler
 from margin_trader.broker import SimBroker
+from margin_trader.data_source import HistoricCSVDataHandler
+from margin_trader.strategy import Strategy
 from margin_trader.trader import Trader
 
 
@@ -40,6 +40,6 @@ if __name__ == "__main__":
     strategy = BuyAndHoldStrategy(symbols=SYMBOLS, data=data_handler, broker=sim_broker)
     trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
     trader.run()
-    
+
     result = trader.backtest_result
     trader.plot()

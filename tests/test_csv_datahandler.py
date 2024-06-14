@@ -1,8 +1,9 @@
-import unittest
 import csv
 import os
+import unittest
 from pathlib import Path
 from queue import Queue
+
 from margin_trader.data_source import HistoricCSVDataHandler
 
 CSV_DIR = Path(__file__).parent

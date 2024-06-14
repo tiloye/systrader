@@ -1,16 +1,22 @@
-import unittest
 import csv
 import os
-import pandas as pd
+import unittest
 from pathlib import Path
-from examples.buy_hold_strategy import *
+
+import pandas as pd
+
+from examples.buy_hold_strategy import (
+    BuyAndHoldStrategy,
+    HistoricCSVDataHandler,
+    SimBroker,
+    Trader,
+)
 
 CSV_DIR = Path(__file__).parent
 SYMBOLS = ["AAPL"]
 
 
 class TestTraderBacktest(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         data = [

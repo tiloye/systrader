@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def get_pyfolio_roundtrips(history: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Convert position/trade history to pyfolio roundtrip trade history."""
 

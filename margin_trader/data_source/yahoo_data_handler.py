@@ -1,6 +1,8 @@
+from datetime import datetime
+
 import yfinance as yf
 import yfinance.shared as shared
-from datetime import datetime
+
 from margin_trader.data_source.data_handler import BacktestDataHandler
 
 
@@ -74,7 +76,7 @@ class YahooDataHandler(BacktestDataHandler):
                 if set(symbols_with_error).issubset(symbols):
                     print(f"Could not download data for {symbols_with_error}")
                     df = df.drop(columns=symbols_with_error, axis=1, level=0)
-                    if df.empty: # No symbol was downloaded
+                    if df.empty:  # No symbol was downloaded
                         raise ValueError(shared._ERRORS)
             self.symbol_data = {
                 symbol: self.__adjust(df[symbol]) for symbol in df.columns.levels[0]

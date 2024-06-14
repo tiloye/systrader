@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+
 from margin_trader.event import MarketEvent
 
 

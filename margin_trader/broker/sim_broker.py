@@ -1,10 +1,12 @@
-import pandas as pd
-from datetime import datetime
 from copy import deepcopy
+from datetime import datetime
 from queue import Queue
+
+import pandas as pd
+
 from margin_trader.broker import Broker
 from margin_trader.data_source import DataHandler
-from margin_trader.event import FillEvent, OrderEvent, MarketEvent
+from margin_trader.event import FillEvent, MarketEvent, OrderEvent
 
 
 class SimBroker(Broker):

@@ -1,9 +1,9 @@
 import unittest
+
 from margin_trader.broker.sim_broker import Position
 
 
 class TestPosition(unittest.TestCase):
-
     def setUp(self):
         self.position = Position("2024-05-06", "AAPL", 100, 150.0, 0.5, "BUY", 0)
 
@@ -72,10 +72,10 @@ class TestPosition(unittest.TestCase):
     def test_update_close_time(self):
         self.position.update_close_time("2024-05-07")
         self.assertEqual(self.position.close_time, "2024-05-07")
-    
+
     def test_add_postion(self):
         self.position.add_position(160.0, 50)
-        
+
         self.assertAlmostEqual(self.position.fill_price, 153.33, 2)
         self.assertEqual(self.position.units, 150)
         self.assertEqual(self.position.last_price, 160.0)

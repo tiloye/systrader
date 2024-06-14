@@ -1,6 +1,6 @@
+import empyrical as emp
 import numpy as np
 import pandas as pd
-import empyrical as emp
 
 
 def total_return(returns: pd.Series | np.ndarray) -> float:

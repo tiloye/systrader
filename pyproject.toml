@@ -18,6 +18,16 @@ mypy = "^1.10.0"
 ruff = "^0.4.8"
 pre-commit = "^3.7.1"
 
+[tool.mypy]
+pretty = true
+python_version = "3.10"
+check_untyped_defs = true
+ignore_missing_imports = true
+disable_error_code = "var-annotated, misc"
+allow_redefinition = true
+disallow_any_expr = false
+exclude = ['tests']
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

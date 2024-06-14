@@ -1,3 +1,4 @@
+# mypy: disable-error-code=union-attr
 import csv
 import os
 import unittest
@@ -41,7 +42,6 @@ class TestHistoricalCSVDataHandler(unittest.TestCase):
         self.assertEqual(CSV_DIR, self.bars.csv_dir)
         self.assertEqual(len(self.bars.latest_symbol_data), len(self.bars.symbols))
         self.assertEqual(len(self.bars.symbols), len(self.bars.symbol_data))
-        self.assertEqual(self.bars.current_datetime, self.bars.start_date)
         self.assertEqual(self.bars.start_date, "2024-05-03")
         self.assertEqual(self.bars.end_date, "2024-05-07")
 

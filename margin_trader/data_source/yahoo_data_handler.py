@@ -48,8 +48,8 @@ class YahooDataHandler(BacktestDataHandler):
     def __init__(
         self,
         symbols: list[str],
-        start_date: str | datetime = None,
-        end_date: str | datetime = None,
+        start_date: str | datetime | None = None,
+        end_date: str | datetime | None = None,
         use_cols: list[str] | None = None,
     ):
         super().__init__(
@@ -58,8 +58,8 @@ class YahooDataHandler(BacktestDataHandler):
 
     def _load_symbols(self) -> None:
         self._download_data(self.symbols, self.start_date, self.end_date)
-        if self._extra_label:
-            labels = [label.lower() for label in self._extra_label]
+        if self.use_cols:
+            labels = [label.lower() for label in self.use_cols]
             cols = self._ohlc + labels
         else:
             cols = self._ohlc
@@ -67,7 +67,10 @@ class YahooDataHandler(BacktestDataHandler):
             self.symbol_data[symbol] = self.symbol_data[symbol][cols]
 
     def _download_data(
-        self, symbols: str | list[str], start: str | datetime, end: str | datetime
+        self,
+        symbols: str | list[str],
+        start: str | datetime | None,
+        end: str | datetime | None,
     ):
         if len(symbols) > 1:
             df = yf.download(symbols, start=start, end=end, group_by="ticker")

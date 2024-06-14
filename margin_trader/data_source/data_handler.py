@@ -47,7 +47,7 @@ class BacktestDataHandler(DataHandler):
         The start date of the backtest.
     end_date : str or datetime
         The end date of the backtest.
-    use_cols : str or list, optional
+    use_cols : list[str], optional
         Additional columns to include in the data.
 
     Attributes
@@ -73,22 +73,18 @@ class BacktestDataHandler(DataHandler):
     def __init__(
         self,
         symbols: str | list[str],
-        start_date: str | datetime = None,
-        end_date: str | datetime = None,
-        use_cols: str | list[str] = None,
+        start_date: str | datetime | None = None,
+        end_date: str | datetime | None = None,
+        use_cols: list[str] | None = None,
     ):
         self.symbols = symbols if isinstance(symbols, list) else [symbols]
         self.symbol_data = {}
         self.latest_symbol_data = {}
         self.start_date = start_date
         self.end_date = end_date
-        self.current_datetime = start_date
         self.continue_backtest = True
         self._ohlc = ["open", "high", "low", "close"]
-        if use_cols:
-            self._extra_label = use_cols if isinstance(use_cols, list) else [use_cols]
-        else:
-            self._extra_label = use_cols
+        self.use_cols = use_cols
 
         self._prepare_data()
 
@@ -103,8 +99,8 @@ class BacktestDataHandler(DataHandler):
             self.symbol_data[symbol] = self.symbol_data[symbol].itertuples(name=symbol)
 
     def _load_symbols(self):
-        if self._extra_label:
-            labels = [label.lower() for label in self._extra_label]
+        if self.use_cols:
+            labels = [label.lower() for label in self.use_cols]
             cols = self._ohlc + labels
         else:
             cols = self._ohlc
@@ -123,7 +119,9 @@ class BacktestDataHandler(DataHandler):
                 )
                 continue
 
-    def _load_data(self, symbol: str, start: str | datetime, end: str | datetime):
+    def _load_data(
+        self, symbol: str, start: str | datetime | None, end: str | datetime | None
+    ):
         """
         Load a data for a symbol into a pandas DataFrame with proper indexing.
         """

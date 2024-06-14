@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 class Event:
     """
     Event is base class providing an interface for all subsequent
@@ -14,7 +17,7 @@ class MarketEvent(Event):
     corresponding bars.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialises the MarketEvent.
         """
@@ -27,7 +30,7 @@ class SignalEvent(Event):
     This is received by a Portfolio object and acted upon.
     """
 
-    def __init__(self, symbol, datetime, signal_type):
+    def __init__(self, symbol: str, timeindex: datetime, signal_type: str):
         """
         Initialises the SignalEvent.
 
@@ -39,7 +42,7 @@ class SignalEvent(Event):
 
         self.type = "SIGNAL"
         self.symbol = symbol
-        self.datetime = datetime
+        self.timeindex = timeindex
         self.signal_type = signal_type
 
 
@@ -47,20 +50,20 @@ class OrderEvent(Event):
     """
     Handles the event of sending an Order to an execution system.
     The order contains a symbol (e.g. GOOG), a type (market or limit),
-    quantity and a direction.
+    units and a direction.
     """
 
-    def __init__(self, symbol, order_type, units, side):
+    def __init__(self, symbol: str, order_type: str, units: int, side: str) -> None:
         """
         Initialises the order type, setting whether it is
         a Market order ('MKT') or Limit order ('LMT'), has
-        a quantity (integral) and its direction ('BUY' or
+        a units (integral) and its direction ('BUY' or
         'SELL').
 
         Parameters:
         symbol - The instrument to trade.
         order_type - 'MKT' or 'LMT' for Market or Limit.
-        quantity - Non-negative integer for quantity.
+        units - Non-negative integer for units.
         side - 'BUY' or 'SELL' for long or short.
         """
 
@@ -69,41 +72,41 @@ class OrderEvent(Event):
         self.order_type = order_type
         self.units = units
         self.side = side
-        self.status = None
-        self.id = None
+        self.status = ""
+        self.id = 0
 
-    def print_order(self):
+    def print_order(self) -> None:
         """
         Outputs the values within the Order.
         """
         print(
-            "Order: Symbol=%s, Type=%s, Quantity=%s, Direction=%s"
-            % (self.symbol, self.order_type, self.quantity, self.direction)
+            "Order: Symbol=%s, Type=%s, units=%s, Direction=%s"
+            % (self.symbol, self.order_type, self.units, self.side)
         )
 
 
 class FillEvent(Event):
     """
     Encapsulates the notion of a Filled Order, as returned
-    from a brokerage. Stores the quantity of an instrument
+    from a brokerage. Stores the units of an instrument
     actually filled and at what price. In addition, stores
     the commission of the trade from the brokerage.
     """
 
     def __init__(
         self,
-        timeindex,
-        symbol,
-        units,
-        side,
-        fill_price,
-        commission=None,
-        result="open",
-        id=None,
-    ):
+        timeindex: datetime,
+        symbol: str,
+        units: int,
+        side: str,
+        fill_price: float,
+        commission: float | None = None,
+        result: str = "open",
+        id: int = 0,
+    ) -> None:
         """
         Initialises the FillEvent object. Sets the symbol, exchange,
-        quantity, direction, cost of fill and an optional
+        units, direction, cost of fill and an optional
         commission.
 
         If commission is not provided, the Fill object will
@@ -117,7 +120,7 @@ class FillEvent(Event):
         side - The direction of fill ('BUY' or 'SELL')
         fill_price - The price the order was filled.
         commission - An optional commission sent from IB.
-        result - The result of the execution of the order
+        result - The position outcome of an executed order ("open" or "close").
         id - The order id for tracking the position
         """
 
@@ -136,7 +139,13 @@ class FillEvent(Event):
         else:
             self.commission = commission
 
-    def calculate_ib_commission(self):
+    @property
+    def is_close(self) -> bool:
+        if self.result == "close":
+            return True
+        return False
+
+    def calculate_ib_commission(self) -> float:
         """
         Calculates the fees of trading based on an Interactive
         Brokers fee structure for API, in USD.
@@ -147,9 +156,9 @@ class FillEvent(Event):
         https://www.interactivebrokers.com/en/index.php?f=commission&p=stocks2
         """
         full_cost = 1.3
-        if self.quantity <= 500:
-            full_cost = max(1.3, 0.013 * self.quantity)
+        if self.units <= 500:
+            full_cost = max(1.3, 0.013 * self.units)
         else:  # Greater than 500
-            full_cost = max(1.3, 0.008 * self.quantity)
-        full_cost = min(full_cost, 0.5 / 100.0 * self.quantity * self.fill_cost)
+            full_cost = max(1.3, 0.008 * self.units)
+        full_cost = min(full_cost, 0.5 / 100.0 * self.units * self.fill_price)
         return full_cost

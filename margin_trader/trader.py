@@ -61,11 +61,11 @@ class Trader:
     def _run_live(self, **kwargs):
         pass
 
-    def run(self, **kwargs) -> pd.Series | None:
+    def run(self, **kwargs):
         if self._is_backtest():
             self._run_backtest()
         else:
-            self._run_live()
+            self._run_live(**kwargs)
 
     def _is_backtest(self):
         if isinstance(self.data_handler, BacktestDataHandler) and isinstance(

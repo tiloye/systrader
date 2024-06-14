@@ -56,8 +56,8 @@ class HistoricCSVDataHandler(BacktestDataHandler):
         self,
         csv_dir: str | Path,
         symbols: list[str],
-        start_date: str | datetime = None,
-        end_date: str | datetime = None,
+        start_date: str | datetime | None = None,
+        end_date: str | datetime | None = None,
         use_cols: list[str] | None = None,
     ):
         self.csv_dir = csv_dir
@@ -66,7 +66,7 @@ class HistoricCSVDataHandler(BacktestDataHandler):
         )
 
     def _load_data(
-        self, symbol: str, start: str | datetime, end: str | datetime
+        self, symbol: str, start: str | datetime | None, end: str | datetime | None
     ) -> pd.DataFrame:
         """
         Load a CSV file for a symbol into a pandas DataFrame with proper indexing.

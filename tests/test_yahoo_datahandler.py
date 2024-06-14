@@ -13,7 +13,7 @@ class TestYahooDataHandler(unittest.TestCase):
             symbols=cls.symbols,
             start_date="2024-05-06",
             end_date="2024-05-11",
-            use_cols="volume",
+            use_cols=["volume"],
         )
         cls.bars._add_event_queue(cls.event_queue)
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from copy import deepcopy
 from datetime import datetime
 from queue import Queue
@@ -5,8 +7,8 @@ from queue import Queue
 import pandas as pd
 
 from margin_trader.broker import Broker
-from margin_trader.data_source import DataHandler
-from margin_trader.event import FillEvent, MarketEvent, OrderEvent
+from margin_trader.data_source import BacktestDataHandler
+from margin_trader.event import Event, FillEvent, MarketEvent, OrderEvent
 
 
 class SimBroker(Broker):
@@ -60,12 +62,12 @@ class SimBroker(Broker):
 
     def __init__(
         self,
-        data_handler: DataHandler,
+        data_handler: BacktestDataHandler,
         balance: int | float = 100_000,
         leverage: int = 1,
-        commission: None | int | float = None,
+        commission: float = 0.0,
         stop_out_level: float = 0.2,
-        exec_price="current",
+        exec_price: str = "current",
     ):
         self.balance = balance
         self.equity = balance
@@ -77,10 +79,10 @@ class SimBroker(Broker):
         self._exec_price = exec_price
         self.pending_orders = Queue()
         self.account_history = []
-        self.__order_tracking_id = 0
+        self.__order_tracking_id = 1
         self.__stop_out_level = stop_out_level
 
-    def _add_event_queue(self, event_queue):
+    def _add_event_queue(self, event_queue: Queue[Event]) -> None:
         self.events = event_queue
 
     def execute_order(self, event: OrderEvent) -> None:
@@ -141,7 +143,7 @@ class SimBroker(Broker):
             )
             self.events.put(fill_event)
 
-    def __check_order(self, event: OrderEvent):
+    def __check_order(self, event: OrderEvent) -> str:
         """
         Check if an order event is to open or close a position.
 
@@ -164,7 +166,11 @@ class SimBroker(Broker):
         return "OPEN"
 
     def buy(
-        self, symbol: str, order_type: str = "MKT", units: int | float = 100, id=None
+        self,
+        symbol: str,
+        order_type: str = "MKT",
+        units: int = 100,
+        id: int | None = None,
     ) -> None:
         """
         Buy x units of symbol.
@@ -181,7 +187,11 @@ class SimBroker(Broker):
         self.__create_order(symbol, order_type, "BUY", units, id)
 
     def sell(
-        self, symbol: str, order_type: str = "MKT", units: int | float = 100, id=None
+        self,
+        symbol: str,
+        order_type: str = "MKT",
+        units: int = 100,
+        id: int | None = None,
     ) -> None:
         """
         Sell x units of symbol.
@@ -197,7 +207,7 @@ class SimBroker(Broker):
         """
         self.__create_order(symbol, order_type, "SELL", units, id)
 
-    def close(self, symbol: str, units: int | float = 100) -> None:
+    def close(self, symbol: str, units: int = 100) -> None:
         """
         Close an existing position with an opposing order.
 
@@ -236,7 +246,12 @@ class SimBroker(Broker):
                 close_all(positions)
 
     def __create_order(
-        self, symbol: str, order_type: str, side: str, units: int | float = 100, id=None
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        units: int = 100,
+        id: int | None = None,
     ) -> None:
         """
         Create an order event.
@@ -267,7 +282,7 @@ class SimBroker(Broker):
         else:
             raise NotImplementedError(f"Cannot create {order.order_type} order.")
 
-    def check_pending_orders(self):
+    def check_pending_orders(self) -> None:
         """Check if there are pending orders and add them to the event queue."""
         if not self.pending_orders.empty():
             n_pending = len(self.pending_orders.queue)
@@ -289,18 +304,16 @@ class SimBroker(Broker):
             The event to update the account from.
         """
         self.__update_positions(event)
-        self.__update_balance(event)
-        self.__update_equity(event)
-        self.__update_free_margin()
+        self.__update_fund_values(event)
         self.__update_account_history(event)
         if self.__margin_call():
             self._stop_simulation()
 
-    def __update_positions(self, event: MarketEvent | FillEvent):
+    def __update_positions(self, event: MarketEvent | FillEvent) -> None:
         """Update positions based on market or fill events."""
-        if event.type == "MARKET":
+        if isinstance(event, MarketEvent):
             self.__update_positions_from_price()
-        elif event.type == "FILL":
+        elif isinstance(event, FillEvent):
             self.__update_positions_from_fill(event)
             if event.result == "open" and self._exec_price == "next":
                 # Update the PnL of an order executed at the open price.
@@ -319,10 +332,18 @@ class SimBroker(Broker):
                 symbol, self.data_handler.get_latest_price(symbol)
             )
 
+    def __update_fund_values(self, event: MarketEvent | FillEvent) -> None:
+        if isinstance(event, MarketEvent):
+            self.__update_equity(event)
+            self.__update_free_margin()
+        elif isinstance(event, FillEvent):
+            self.__update_balance(event)
+            self.__update_equity(event)
+            self.__update_free_margin()
+
     def __update_balance(self, event: FillEvent) -> None:
-        """Update the account balance based on closed position."""
-        # Check if a position has been closed
-        if event.type == "FILL" and event.result == "close":
+        """Update the account balance based on closed position from a fill event."""
+        if event.is_close:
             self.balance += self.p_manager.history[-1].pnl
 
     def __update_equity(self, event: MarketEvent | FillEvent) -> None:
@@ -331,21 +352,22 @@ class SimBroker(Broker):
             self.equity = self.balance + self.p_manager.get_total_pnl()
 
     def __update_free_margin(self) -> None:
-        """Update the free margin available for trading."""
+        """Update the free margin available for opening positions."""
         self.free_margin = self.equity - self.get_used_margin()
 
-    def __update_account_history(self, event):
+    def __update_account_history(self, event: MarketEvent | FillEvent) -> None:
         """Update the account history based on market or fill events."""
         timeindex = self.data_handler.current_datetime
-        if event.type == "MARKET":
+        if isinstance(event, MarketEvent):
             self.account_history.append(
                 {"timeindex": timeindex, "balance": self.balance, "equity": self.equity}
             )
-        elif event.type == "FILL" and event.result == "close":
-            recent_history = self.account_history[-1]
-            if timeindex == recent_history["timeindex"]:
-                recent_history["balance"] = self.balance
-                recent_history["equity"] = self.equity
+        elif isinstance(event, FillEvent):
+            if event.result == "close":
+                recent_history = self.account_history[-1]
+                if timeindex == recent_history["timeindex"]:
+                    recent_history["balance"] = self.balance
+                    recent_history["equity"] = self.equity
 
     def __margin_call(self) -> bool:
         try:
@@ -375,7 +397,7 @@ class SimBroker(Broker):
         margin = margin / self.leverage
         return margin
 
-    def get_position(self, symbol: str):
+    def get_position(self, symbol: str) -> Position:
         """
         Get the current position for a given symbol.
 
@@ -391,7 +413,7 @@ class SimBroker(Broker):
         """
         return self.p_manager.positions.get(symbol, False)
 
-    def get_positions(self):
+    def get_positions(self) -> dict[str, Position]:
         """
         Get all current positions.
 
@@ -402,7 +424,7 @@ class SimBroker(Broker):
         """
         return self.p_manager.positions
 
-    def get_positions_history(self):
+    def get_positions_history(self) -> list[Position]:
         """
         Get the history of all positions.
 
@@ -413,7 +435,7 @@ class SimBroker(Broker):
         """
         return self.p_manager.history
 
-    def get_account_history(self):
+    def get_account_history(self) -> dict[str, pd.DataFrame]:
         """
         Get the account balance and equity history.
 
@@ -445,7 +467,7 @@ class PositionManager:
         A list of closed positions.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.positions = {}
         self.history = []
 
@@ -508,7 +530,7 @@ class PositionManager:
         event
             The fill event to close a position from.
         """
-        position = self.positions.get(event.symbol)
+        position = self.positions.get(event.symbol, False)
 
         def add_to_history(c_position, event):
             c_position.commission += event.commission
@@ -516,19 +538,20 @@ class PositionManager:
             c_position.update_close_time(event.timeindex)
             self.history.append(c_position)
 
-        if event.units < position.units:
-            open_units = position.units - event.units
-            partial_position = deepcopy(position)
-            partial_position.reduce_position(
-                event.fill_price, position.units - open_units
-            )
-            position.reduce_position(event.fill_price, event.units)
-            add_to_history(partial_position, event)
-        else:
-            add_to_history(position, event)
-            del self.positions[event.symbol]
+        if position:
+            if event.units < position.units:
+                open_units = position.units - event.units
+                partial_position = deepcopy(position)
+                partial_position.reduce_position(
+                    event.fill_price, position.units - open_units
+                )
+                position.reduce_position(event.fill_price, event.units)
+                add_to_history(partial_position, event)
+            else:
+                add_to_history(position, event)
+                del self.positions[event.symbol]
 
-    def get_total_pnl(self) -> int:
+    def get_total_pnl(self) -> float:
         """
         Get the total PnL of all open positions.
 
@@ -586,7 +609,7 @@ class Position:
         self,
         timeindex: str | datetime,
         symbol: str,
-        units: int | float,
+        units: int,
         fill_price: float,
         commission: float,
         side: str,
@@ -599,7 +622,7 @@ class Position:
         self.commission = commission
         self.side = side
         self.open_time = timeindex
-        self.pnl = 0
+        self.pnl = 0.0
         self.id = id
 
     def update_pnl(self) -> None:
@@ -655,7 +678,7 @@ class Position:
         """
         return self.fill_price * self.units
 
-    def add_position(self, price, units) -> None:
+    def add_position(self, price: float, units: int) -> None:
         """Add more units to position."""
         prev_price = self.fill_price
         prev_units = self.units
@@ -664,7 +687,7 @@ class Position:
         self.units = prev_units + units
         self.update(price)
 
-    def reduce_position(self, price, units):
+    def reduce_position(self, price: float, units: int) -> None:
         self.units = self.units - units
         self.update(price)
 

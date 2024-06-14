@@ -29,7 +29,7 @@ class SMAStrategy(Strategy):
                             else:
                                 self.broker.sell(s)
 
-    def _calculate_signal(self, prices: list[float]) -> str:
+    def _calculate_signal(self, prices: list[float]) -> str | None:
         ma = sum(prices) / self.window
         latest_close = prices[-1]
         prev_close = prices[-2]
@@ -37,6 +37,8 @@ class SMAStrategy(Strategy):
             return "BUY"
         elif latest_close < ma and prev_close >= ma:
             return "SELL"
+        else:
+            return None
 
 
 if __name__ == "__main__":

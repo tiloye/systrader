@@ -82,18 +82,19 @@ class YahooDataHandler(BacktestDataHandler):
                     if df.empty:  # No symbol was downloaded
                         raise ValueError(shared._ERRORS)
             self.symbol_data = {
-                symbol: self.__adjust(df[symbol]) for symbol in df.columns.levels[0]
+                symbol: self._adjust(df[symbol]) for symbol in df.columns.levels[0]
             }
         else:
             df = yf.download(symbols, start=start, end=end, group_by="ticker")
             if shared._ERRORS:
                 symbols_with_error = list(shared._ERRORS.keys())
                 raise ValueError(shared._ERRORS)
-            self.symbol_data = {symbols[0]: self.__adjust(df)}
+            self.symbol_data = {symbols[0]: self._adjust(df)}
 
         pass
 
-    def __adjust(self, data):
+    def _adjust(self, data):
+        """Adjust ohlcv with the yfinance adjustment factor (adj_close/close)."""
         data = data.copy()
         data.columns = data.columns.str.lower()
         adj_close = data["adj close"]

@@ -245,7 +245,7 @@ class TestSimBroker(unittest.TestCase):
         fill_event = self.run_close_workflow()
         self.broker.update_account(fill_event)
         account_history = self.broker.get_account_history()
-        balance_equity_col = ["timeindex", "balance", "equity"]
+        balance_equity_col = ["balance", "equity"]
         positions_col = [
             "symbol",
             "units",
@@ -260,6 +260,7 @@ class TestSimBroker(unittest.TestCase):
         self.assertIn("balance_equity", account_history)
         self.assertIn("positions", account_history)
         self.assertIsInstance(account_history["balance_equity"], pd.DataFrame)
+        self.assertIsInstance(account_history["balance_equity"].index, pd.DatetimeIndex)
         self.assertIsInstance(account_history["positions"], pd.DataFrame)
         self.assertTrue(
             set(balance_equity_col).issubset(account_history["balance_equity"].columns)

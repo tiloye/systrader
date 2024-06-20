@@ -445,7 +445,9 @@ class SimBroker(Broker):
             A dictionary containing the balance and equity history
             and the positions history.
         """
-        balance_equity = pd.DataFrame.from_records(self.account_history)
+        balance_equity = pd.DataFrame.from_records(self.account_history).set_index(
+            "timeindex"
+        )
         position_history = [vars(position) for position in self.get_positions_history()]
         position_history = pd.DataFrame.from_records(position_history)
         position_history.rename(

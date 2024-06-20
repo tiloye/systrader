@@ -2,7 +2,8 @@ import unittest
 
 import pandas as pd
 
-import margin_trader.performance.metric as perf
+import margin_trader.performance.metric as metrics
+import margin_trader.performance.utils as putils
 
 
 class TestPerformance(unittest.TestCase):
@@ -25,53 +26,116 @@ class TestPerformance(unittest.TestCase):
         self.returns = self.data.pct_change().fillna(0.0)
 
     def test_calculate_total_return(self):
-        gross_return = perf.total_return(self.returns)
+        gross_return = metrics.total_return(self.returns)
         gross_return = round(gross_return, 4)
         self.assertEqual(gross_return, 0.1200)
 
     def test_calculate_annual_return(self):
-        ann_ret = perf.annual_return(self.returns)
+        ann_ret = metrics.annual_return(self.returns)
         ann_ret = round(ann_ret, 4)
         self.assertEqual(ann_ret, 16.3898)
 
     def test_calculate_annual_volatility(self):
-        ann_vol = perf.annual_volatility(self.returns)
+        ann_vol = metrics.annual_volatility(self.returns)
         ann_vol = round(ann_vol, 4)
         self.assertEqual(ann_vol, 0.6686)
 
     def test_calculate_max_drawdown(self):
-        dd = perf.max_drawdown(self.returns)
+        dd = metrics.max_drawdown(self.returns)
         dd = round(dd, 4)
         self.assertEqual(dd, -0.0755)
 
     def test_calculate_longest_drawdown_period(self):
-        dd_duration = perf.longest_dd_period(self.returns)
+        dd_duration = metrics.longest_dd_period(self.returns)
         self.assertEqual(dd_duration, 6)
 
     def test_calculate_sharpe_ratio(self):
-        sr = perf.sharpe_ratio(self.returns)
+        sr = metrics.sharpe_ratio(self.returns)
         sr = round(sr, 4)
         self.assertEqual(round(sr, 4), 4.5939)
 
     def test_calculate_var(self):
-        var = perf.var(self.returns)
+        var = metrics.var(self.returns)
         var = round(var, 4)
         self.assertEqual(var, -0.0390)
 
     def test_calculate_win_rate(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
-        win_rate = perf.win_rate(self.data)
+        win_rate = metrics.win_rate(self.data)
         self.assertEqual(win_rate, 0.7)
 
     def test_calculate_expectancy(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
-        expectancy = perf.expectancy(self.data)
+        expectancy = metrics.expectancy(self.data)
         self.assertAlmostEqual(expectancy, 41.0)
 
     def test_calcualte_profit_factor(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
-        pfactor = perf.profit_factor(self.data)
+        pfactor = metrics.profit_factor(self.data)
         self.assertAlmostEqual(pfactor, 2.3099, 4)
+
+
+class TestPerformanceUtils(unittest.TestCase):
+    def setUp(self):
+        dates = pd.date_range("2024-01-01", "2024-01-05")
+        self.bl_eq_history = pd.DataFrame(
+            {
+                "balance": [1000.0, 1000.0, 1010.0, 1010.0, 1005.0],
+                "equity": [1000.0, 1001.0, 1010.0, 1006.0, 1005.0],
+            },
+            index=dates,
+        )
+        self.trade_history = pd.DataFrame(
+            {
+                "symbol": ["A", "B"],
+                "units": [10, 10],
+                "open_price": [10, 20],
+                "close_price": [11.0, 19.5],
+                "commission": [0.0, 0.0],
+                "side": ["BUY", "BUY"],
+                "open_time": [dates[0], dates[2]],
+                "close_time": [dates[2], dates[4]],
+                "pnl": [10.0, -5.0],
+                "id": [1, 2],
+            }
+        )
+
+    def test_get_trade_roi(self):
+        trade_history = self.trade_history
+        balance_history = self.bl_eq_history["balance"]
+        expected = pd.Series([0.01, -0.0050])
+        rets = putils.get_trade_roi(trade_history, balance_history).round(4)
+        try:
+            pd.testing.assert_series_equal(rets, expected)
+        except Exception as e:
+            raise AssertionError(e)
+        else:
+            self.assertTrue(True)
+
+    def test_get_pyfolio_roundtrips(self):
+        account_history = {
+            "balance_equity": self.bl_eq_history,
+            "positions": self.trade_history,
+        }
+        expected_cols = [
+            "pnl",
+            "open_dt",
+            "close_dt",
+            "long",
+            "symbol",
+            "duration",
+            "returns",
+        ]
+        pyfolio_rts = putils.get_pyfolio_roundtrips(account_history)
+
+        self.assertListEqual(expected_cols, pyfolio_rts.columns.tolist())
+        self.assertTrue(pyfolio_rts["pnl"].apply(type).eq(float).all())
+        self.assertTrue(pyfolio_rts["open_dt"].apply(type).eq(pd.Timestamp).all())
+        self.assertTrue(pyfolio_rts["close_dt"].apply(type).eq(pd.Timestamp).all())
+        self.assertTrue(pyfolio_rts["long"].apply(type).eq(bool).all())
+        self.assertTrue(pyfolio_rts["symbol"].apply(type).eq(str).all())
+        self.assertTrue(pyfolio_rts["duration"].apply(type).eq(pd.Timedelta).all())
+        self.assertTrue(pyfolio_rts["returns"].apply(type).eq(float).all())
 
 
 if __name__ == "__main__":

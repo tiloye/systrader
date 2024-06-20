@@ -3,7 +3,7 @@ import queue
 import matplotlib.pyplot as plt
 import pandas as pd
 
-import margin_trader.performance.metric as perf
+import margin_trader.performance.metric as metrics
 from margin_trader.broker import SimBroker
 from margin_trader.data_source import BacktestDataHandler
 
@@ -77,17 +77,17 @@ class Trader:
         """Output the strategy performance from the backtest."""
 
         perf_measures = {
-            "Total Return": perf.total_return(self.equity_rets) * 100,
-            "Annual Return": perf.annual_return(self.equity_rets) * 100,
-            "Volatiliy": perf.annual_volatility(self.equity_rets, periods=1) * 100,
-            "Annual Volatility": perf.annual_volatility(self.equity_rets) * 100,
-            "Sharpe ratio": perf.sharpe_ratio(self.equity_rets),
-            "Maximum drawdown": perf.max_drawdown(self.equity_rets) * 100,
-            "VaR": perf.var(self.equity_rets) * 100,
-            "Longest drawdown period": perf.longest_dd_period(self.equity_rets),
-            "Win Rate": perf.win_rate(self.position_history.pnl),
-            "Expectancy": perf.expectancy(self.position_history.pnl),
-            "Profit factor": perf.profit_factor(self.position_history.pnl),
+            "Total Return": metrics.total_return(self.equity_rets) * 100,
+            "Annual Return": metrics.annual_return(self.equity_rets) * 100,
+            "Volatiliy": metrics.annual_volatility(self.equity_rets, periods=1) * 100,
+            "Annual Volatility": metrics.annual_volatility(self.equity_rets) * 100,
+            "Sharpe ratio": metrics.sharpe_ratio(self.equity_rets),
+            "Maximum drawdown": metrics.max_drawdown(self.equity_rets) * 100,
+            "VaR": metrics.var(self.equity_rets) * 100,
+            "Longest drawdown period": metrics.longest_dd_period(self.equity_rets),
+            "Win Rate": metrics.win_rate(self.position_history.pnl),
+            "Expectancy": metrics.expectancy(self.position_history.pnl),
+            "Profit factor": metrics.profit_factor(self.position_history.pnl),
         }
         perf_measures = pd.Series(perf_measures)
         return perf_measures

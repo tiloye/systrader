@@ -1,6 +1,7 @@
 import empyrical as emp
 import numpy as np
 import pandas as pd
+import pyfolio as pf
 
 
 def total_return(returns: pd.Series | np.ndarray) -> float:
@@ -230,3 +231,37 @@ def profit_factor(position_outcome: pd.Series) -> float:
     if gross_loss > 0:
         return gross_win / gross_loss
     return gross_win
+
+
+def returns_stats(returns: pd.Series) -> pd.DataFrame:
+    """
+    Get return statistics with pyfolio.
+
+    Parameters
+    ----------
+    returns
+        Daily equity/strategy returns.
+
+    Returns
+    -------
+    pd.DataFrame
+        A single column dataframe containing various metrics
+        indexed the corresponding names.
+
+    """
+
+    assert isinstance(
+        returns.index, pd.DatetimeIndex
+    ), "Series must have pandas datetime index"
+
+    stats = pf.show_perf_stats(returns, return_df=True)
+    stats = (
+        stats.Backtest.apply(
+            lambda x: str(round(float(x.split("%")[0]), 2)) + "%"
+            if isinstance(x, str)
+            else x
+        )
+        .apply(lambda x: round(x, 2) if isinstance(x, float) else x)
+        .to_frame()
+    )
+    return stats

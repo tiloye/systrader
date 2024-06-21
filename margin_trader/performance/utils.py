@@ -1,11 +1,11 @@
 import pandas as pd
 
 
-def get_pyfolio_roundtrips(history: dict[str, pd.DataFrame]) -> pd.DataFrame:
+def get_pyfolio_roundtrips(account_history: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Convert position/trade history to pyfolio roundtrip trade history."""
 
-    balance_history = history["balance_equity"]["balance"]
-    positions = history["positions"].copy()
+    balance_history = account_history["balance_equity"]["balance"]
+    positions = account_history["positions"].copy()
     pyfolio_rts = positions[["pnl", "open_time", "close_time", "side", "symbol"]].copy()
     pyfolio_rts.rename(
         columns={"open_time": "open_dt", "close_time": "close_dt", "side": "long"},

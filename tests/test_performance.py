@@ -23,56 +23,63 @@ class TestPerformance(unittest.TestCase):
                 "2024-05-14",
             ],
         )
+        self.data.index = pd.DatetimeIndex(self.data.index)
         self.returns = self.data.pct_change().fillna(0.0)
 
-    def test_calculate_total_return(self):
+    def test_total_return(self):
         gross_return = metrics.total_return(self.returns)
         gross_return = round(gross_return, 4)
         self.assertEqual(gross_return, 0.1200)
 
-    def test_calculate_annual_return(self):
+    def test_annual_return(self):
         ann_ret = metrics.annual_return(self.returns)
         ann_ret = round(ann_ret, 4)
         self.assertEqual(ann_ret, 16.3898)
 
-    def test_calculate_annual_volatility(self):
+    def test_annual_volatility(self):
         ann_vol = metrics.annual_volatility(self.returns)
         ann_vol = round(ann_vol, 4)
         self.assertEqual(ann_vol, 0.6686)
 
-    def test_calculate_max_drawdown(self):
+    def test_max_drawdown(self):
         dd = metrics.max_drawdown(self.returns)
         dd = round(dd, 4)
         self.assertEqual(dd, -0.0755)
 
-    def test_calculate_longest_drawdown_period(self):
+    def test_longest_drawdown_period(self):
         dd_duration = metrics.longest_dd_period(self.returns)
         self.assertEqual(dd_duration, 6)
 
-    def test_calculate_sharpe_ratio(self):
+    def test_sharpe_ratio(self):
         sr = metrics.sharpe_ratio(self.returns)
         sr = round(sr, 4)
         self.assertEqual(round(sr, 4), 4.5939)
 
-    def test_calculate_var(self):
+    def test_var(self):
         var = metrics.var(self.returns)
         var = round(var, 4)
         self.assertEqual(var, -0.0390)
 
-    def test_calculate_win_rate(self):
+    def test_win_rate(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
         win_rate = metrics.win_rate(self.data)
         self.assertEqual(win_rate, 0.7)
 
-    def test_calculate_expectancy(self):
+    def test_expectancy(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
         expectancy = metrics.expectancy(self.data)
         self.assertAlmostEqual(expectancy, 41.0)
 
-    def test_calcualte_profit_factor(self):
+    def test_profit_factor(self):
         self.data.iloc[1::3] = -1 * self.data.iloc[1::3]
         pfactor = metrics.profit_factor(self.data)
         self.assertAlmostEqual(pfactor, 2.3099, 4)
+
+    def test_returns_stats(self):
+        rets = metrics.returns_stats(self.returns)
+
+        self.assertIsInstance(rets, pd.DataFrame)
+        self.assertTupleEqual(rets.shape, (13, 1))
 
 
 class TestPerformanceUtils(unittest.TestCase):

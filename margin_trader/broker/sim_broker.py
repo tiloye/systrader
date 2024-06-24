@@ -82,7 +82,7 @@ class SimBroker(Broker):
         self.__order_tracking_id = 1
         self.__stop_out_level = stop_out_level
 
-    def _add_event_queue(self, event_queue: Queue[Event]) -> None:
+    def add_event_queue(self, event_queue: Queue[Event]) -> None:
         self.events = event_queue
 
     def execute_order(self, event: OrderEvent) -> None:

@@ -27,5 +27,5 @@ class Strategy(ABC):
         """
         raise NotImplementedError("Should implement calculate_signals()")
 
-    def _add_event_queue(self, event_queue):
+    def add_event_queue(self, event_queue):
         self.events = event_queue

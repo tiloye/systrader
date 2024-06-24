@@ -36,7 +36,7 @@ class TestHistoricalCSVDataHandler(unittest.TestCase):
             start_date="2024-05-03",
             end_date="2024-05-07",
         )
-        self.bars._add_event_queue(self.event_queue)
+        self.bars.add_event_queue(self.event_queue)
 
     def test_initialisation(self):
         self.assertEqual(CSV_DIR, self.bars.csv_dir)

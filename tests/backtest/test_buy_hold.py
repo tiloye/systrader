@@ -3,8 +3,6 @@ import os
 import unittest
 from pathlib import Path
 
-import pandas as pd
-
 from examples.buy_hold_strategy import (
     BuyAndHoldStrategy,
     HistoricCSVDataHandler,
@@ -52,24 +50,19 @@ class TestTraderBacktest(unittest.TestCase):
         self.assertTrue(hasattr(self.trader, "data_handler"))
         self.assertTrue(hasattr(self.trader, "strategy"))
 
-    def test_equity(self):
-        data = pd.read_csv(CSV_DIR / "AAPL.csv")
-        rets = data.Close.pct_change().fillna(0.0)
-        cum_rets = rets.add(1).cumprod().sub(1)
-        starting_position_value = 10200.0
-        equity = cum_rets.mul(starting_position_value).add(
-            self.trader.balance_equity.balance.iloc[0]
-        )
-        equity_ret = equity.pct_change().fillna(0.0)
-        total_ret = (equity_ret.add(1).prod() - 1) * 100
-        ann_ret = (equity_ret.add(1).prod() ** (252 / len(equity_ret)) - 1) * 100
+    def test_positions(self):
+        account_history = self.trader.account_history
+        pos_history = account_history["positions"]
 
-        trader_equity = self.trader.balance_equity.equity
-        trader_total_ret = self.result.loc["Total Return"]
-        trader_ann_ret = self.result.loc["Annual Return"]
-        self.assertListEqual(trader_equity.to_list(), equity.to_list())
-        self.assertAlmostEqual(trader_total_ret, total_ret, 2)
-        self.assertAlmostEqual(trader_ann_ret, ann_ret, 2)
+        self.assertEqual(len(pos_history), 1)
+        self.assertEqual(pos_history.iloc[0].side, "BUY")
+        self.assertEqual(
+            pos_history.iloc[0].open_time.strftime("%Y-%m-%d"), "2024-05-03"
+        )
+        self.assertEqual(
+            pos_history.iloc[0].close_time.strftime("%Y-%m-%d"), "2024-05-07"
+        )
+        self.assertEqual(pos_history.iloc[0].pnl, 1000.0)
 
     @classmethod
     def tearDownClass(cls):

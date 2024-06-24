@@ -88,7 +88,7 @@ class BacktestDataHandler(DataHandler):
 
         self._prepare_data()
 
-    def _add_event_queue(self, event_queue):
+    def add_event_queue(self, event_queue):
         self.events = event_queue
 
     def _prepare_data(self):

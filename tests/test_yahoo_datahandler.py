@@ -17,7 +17,7 @@ class TestYahooDataHandler(unittest.TestCase):
             end_date="2024-05-11",
             use_cols=["volume"],
         )
-        cls.bars._add_event_queue(cls.event_queue)
+        cls.bars.add_event_queue(cls.event_queue)
 
     def test_initialisation(self):
         self.assertIsInstance(self.bars.symbols, list)

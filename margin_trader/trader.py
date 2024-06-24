@@ -12,11 +12,11 @@ class Trader:
     def __init__(self, data_handler, broker, strategy):
         self.events = queue.Queue()
         self.data_handler = data_handler
-        self.data_handler._add_event_queue(self.events)
+        self.data_handler.add_event_queue(self.events)
         self.broker = broker
-        self.broker._add_event_queue(self.events)
+        self.broker.add_event_queue(self.events)
         self.strategy = strategy
-        self.strategy._add_event_queue(self.events)
+        self.strategy.add_event_queue(self.events)
 
     def _handle_events(self) -> None:
         # Handle the events

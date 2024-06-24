@@ -79,7 +79,9 @@ class SimBroker(Broker):
         self._exec_price = exec_price
         self.pending_orders = Queue()
         self.account_history = []
-        self.__order_tracking_id = 1
+        self.order_history = []
+        self.__order_id = 1
+        self.__position_id = 1
         self.__stop_out_level = stop_out_level
 
     def add_event_queue(self, event_queue: Queue[Event]) -> None:
@@ -104,11 +106,11 @@ class SimBroker(Broker):
             raise TypeError("Expected an order event object")
 
         order = self.__check_order(event)
-        if event.status == "PENDING":
-            if event.order_type == "MKT":
+        if event.order_type == "MKT":
+            if self._exec_price == "next":
                 price = self.data_handler.get_latest_price(event.symbol, "open")
-        else:
-            price = self.data_handler.get_latest_price(event.symbol)
+            else:
+                price = self.data_handler.get_latest_price(event.symbol)
 
         if order == "OPEN":
             cost = (event.units * price) / self.leverage
@@ -120,9 +122,11 @@ class SimBroker(Broker):
                     event.side,
                     price,
                     self.commission,
-                    id=event.id,
+                    id=event.pos_id,
                 )
                 self.events.put(fill_event)
+                event.execute()
+                self.order_history.append(event)
             else:
                 print(
                     f"{event.side} order rejected for {event.symbol}: "
@@ -139,9 +143,11 @@ class SimBroker(Broker):
                 price,
                 self.commission,
                 "close",
-                event.id,
+                event.pos_id,
             )
             self.events.put(fill_event)
+            event.execute()
+            self.order_history.append(event)
 
     def __check_order(self, event: OrderEvent) -> str:
         """
@@ -161,7 +167,7 @@ class SimBroker(Broker):
         symbol = event.symbol
         side = event.side
         position = self.p_manager.positions.get(symbol, False)
-        if position and position.side != side and position.id == event.id:
+        if position and position.side != side and position.id == event.pos_id:
             return "CLOSE"
         return "OPEN"
 
@@ -183,6 +189,9 @@ class SimBroker(Broker):
             The type of order, default is "MKT".
         units
             The number of units to buy, default is 100.
+        id
+            Used by the system to determine if an order should open a position or
+            modify an existing position. It should not be set by the user.
         """
         self.__create_order(symbol, order_type, "BUY", units, id)
 
@@ -204,6 +213,9 @@ class SimBroker(Broker):
             The type of order, default is "MKT".
         units
             The number of units to sell, default is 100.
+        id
+            Used by the system to determine if an order should open a position or
+            modify an existing position. It should not be set by the user.
         """
         self.__create_order(symbol, order_type, "SELL", units, id)
 
@@ -258,21 +270,35 @@ class SimBroker(Broker):
 
         Parameters
         ----------
-        symbol : str
+        symbol
             The symbol for the order.
-        order_type : str
+        order_type
             The type of the order.
-        side : str
+        side
             The side of the order, either "BUY" or "SELL".
-        units : int or float, optional
+        units
             The number of units, default is 100.
+        id
+            Used by the system to determine if an order should open a position or
+            modify an existing position.
         """
-        order = OrderEvent(symbol, order_type=order_type, units=units, side=side)
+        order = OrderEvent(
+            self.data_handler.current_datetime,
+            symbol,
+            order_type=order_type,
+            units=units,
+            side=side,
+        )
         if id is not None:
-            order.id = id
+            order.pos_id = id
+            order.id = self.__order_id
+            self.__order_id += 1
         else:
-            order.id = self.__order_tracking_id
-            self.__order_tracking_id += 1
+            order.id = self.__order_id
+            order.pos_id = self.__position_id
+            self.__order_id += 1
+            self.__position_id += 1
+
         if order.order_type == "MKT":
             if self._exec_price == "current":
                 self.events.put(order)
@@ -448,13 +474,21 @@ class SimBroker(Broker):
         balance_equity = pd.DataFrame.from_records(self.account_history).set_index(
             "timeindex"
         )
+
         position_history = [vars(position) for position in self.get_positions_history()]
         position_history = pd.DataFrame.from_records(position_history)
         position_history.rename(
             columns={"fill_price": "open_price", "last_price": "close_price"},
             inplace=True,
         )
-        return {"balance_equity": balance_equity, "positions": position_history}
+
+        order_history = [vars(order) for order in self.order_history]
+        order_history = pd.DataFrame.from_records(order_history)
+        return {
+            "balance_equity": balance_equity,
+            "positions": position_history,
+            "orders": order_history,
+        }
 
 
 class PositionManager:

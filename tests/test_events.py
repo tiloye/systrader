@@ -13,26 +13,42 @@ class TestMarketEvent(unittest.TestCase):
 
 
 class TestOrderEvent(unittest.TestCase):
+    def setUp(self):
+        self.timeindex = datetime(2023, 1, 1, 12, 0, 0)
+        self.symbol = "GOOG"
+        self.order_type = "MKT"
+        self.units = 100
+        self.side = "BUY"
+        self.order_event = OrderEvent(
+            self.timeindex, self.symbol, self.order_type, self.units, self.side
+        )
+
     def test_order_event_initialization(self):
-        symbol = "GOOG"
-        order_type = "MKT"
-        units = 100
-        side = "BUY"
-        order_event = OrderEvent(symbol, order_type, units, side)
-        self.assertEqual(order_event.type, "ORDER")
-        self.assertEqual(order_event.symbol, symbol)
-        self.assertEqual(order_event.order_type, order_type)
-        self.assertEqual(order_event.units, units)
-        self.assertEqual(order_event.side, side)
-        self.assertEqual(order_event.status, "")
-        self.assertEqual(order_event.id, 0)
+        self.assertEqual(self.order_event.type, "ORDER")
+        self.assertEqual(self.order_event.timeindex, self.timeindex)
+        self.assertEqual(self.order_event.symbol, self.symbol)
+        self.assertEqual(self.order_event.order_type, self.order_type)
+        self.assertEqual(self.order_event.units, self.units)
+        self.assertEqual(self.order_event.side, self.side)
+        self.assertEqual(self.order_event.status, "PENDING")
+        self.assertEqual(self.order_event.id, 0)
+        self.assertEqual(self.order_event.pos_id, 0)
+
+    def test_execute(self):
+        self.order_event.execute()
+        self.assertEqual(self.order_event.status, "EXECUTED")
+
+    def test_reject(self):
+        self.order_event.reject()
+        self.assertEqual(self.order_event.status, "REJECTED")
 
     def test_print_order(self):
+        timeindex = datetime(2023, 1, 1, 12, 0, 0)
         symbol = "GOOG"
         order_type = "MKT"
         units = 100
         side = "BUY"
-        order_event = OrderEvent(symbol, order_type, units, side)
+        order_event = OrderEvent(timeindex, symbol, order_type, units, side)
         expected_output = "Order: Symbol=GOOG, Type=MKT, units=100, Direction=BUY\n"
         with StringIO() as out, redirect_stdout(out):
             order_event.print_order()

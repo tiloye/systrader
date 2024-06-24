@@ -64,14 +64,24 @@ class OrderEvent(Event):
         The ID of the order.
     """
 
-    def __init__(self, symbol: str, order_type: str, units: int, side: str) -> None:
+    def __init__(
+        self, timeindex: datetime, symbol: str, order_type: str, units: int, side: str
+    ) -> None:
         self.type = "ORDER"
+        self.timeindex = timeindex
         self.symbol = symbol
         self.order_type = order_type
         self.units = units
         self.side = side
-        self.status = ""
+        self.status = "PENDING"
         self.id = 0
+        self.pos_id = 0
+
+    def execute(self) -> None:
+        self.status = "EXECUTED"
+
+    def reject(self) -> None:
+        self.status = "REJECTED"
 
     def print_order(self) -> None:
         """

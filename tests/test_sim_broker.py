@@ -109,11 +109,18 @@ class TestSimBroker(unittest.TestCase):
     def test_execute_order_same_bar_close(self):
         _ = self.event_queue.get(False)
         fill_event = self.run_buy_workflow()
+        order_event = self.broker.order_history[-1]
 
-        self.assertEqual(fill_event.type, "FILL")
+        self.assertEqual(order_event.order_type, "MKT")
+        self.assertEqual(order_event.id, 1)
+        self.assertEqual(order_event.pos_id, 1)
+        self.assertEqual(order_event.side, "BUY")
+        self.assertEqual(order_event.units, 100)
+        self.assertEqual(order_event.timeindex.strftime("%Y-%m-%d"), "2024-05-03")
         self.assertEqual(fill_event.side, "BUY")
         self.assertEqual(fill_event.timeindex.strftime("%Y-%m-%d"), "2024-05-03")
         self.assertEqual(fill_event.fill_price, 102.0)
+        self.assertEqual(fill_event.units, 100)
 
     def test_execute_order_next_bar_open(self):
         execution_price = "next"
@@ -256,18 +263,32 @@ class TestSimBroker(unittest.TestCase):
             "open_time",
             "close_time",
         ]
+        orders_col = [
+            "timeindex",
+            "type",
+            "symbol",
+            "order_type",
+            "units",
+            "side",
+            "status",
+            "id",
+            "pos_id",
+        ]
 
         self.assertIn("balance_equity", account_history)
         self.assertIn("positions", account_history)
+        self.assertIn("orders", account_history)
         self.assertIsInstance(account_history["balance_equity"], pd.DataFrame)
         self.assertIsInstance(account_history["balance_equity"].index, pd.DatetimeIndex)
         self.assertIsInstance(account_history["positions"], pd.DataFrame)
+        self.assertIsInstance(account_history["orders"], pd.DataFrame)
         self.assertTrue(
             set(balance_equity_col).issubset(account_history["balance_equity"].columns)
         )
         self.assertTrue(
             set(positions_col).issubset(account_history["positions"].columns)
         )
+        self.assertTrue(set(orders_col).issubset(account_history["orders"].columns))
 
     def test_close_all_open_positions_exec_current(self):
         mkt_event = self.event_queue.get(False)

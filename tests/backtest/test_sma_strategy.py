@@ -47,7 +47,6 @@ class TestTraderBacktest(unittest.TestCase):
             data_handler=cls.data_handler, broker=cls.sim_broker, strategy=cls.strategy
         )
         cls.trader.run()
-        cls.result = cls.trader.backtest_result
 
     def test_init(self):
         self.assertTrue(hasattr(self.trader, "events"))

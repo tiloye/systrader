@@ -1,9 +1,5 @@
 import queue
 
-import matplotlib.pyplot as plt
-import pandas as pd
-
-import margin_trader.performance.metric as metrics
 from margin_trader.broker import SimBroker
 from margin_trader.data_source import BacktestDataHandler
 
@@ -19,7 +15,6 @@ class Trader:
         self.strategy.add_event_queue(self.events)
 
     def _handle_events(self) -> None:
-        # Handle the events
         while True:
             try:
                 event = self.events.get(False)
@@ -39,24 +34,18 @@ class Trader:
     def _run_backtest(self):
         """Execute the strategy in an event loop."""
 
+        print("Starting backtest")
         while True:
-            # Update the bars (specific backtest code, as opposed to live trading)
             self.data_handler.update_bars()
             if self.data_handler.continue_backtest:
                 pass
             else:
-                # Close all open positions
                 self.broker.close_all_positions()
                 self._handle_events()
-
-                # Get backtest result
                 self.account_history = self.broker.get_account_history()
-                self.balance_equity = self.account_history["balance_equity"]
-                self.position_history = self.account_history["positions"]
-                self.equity_rets = self.balance_equity.equity.pct_change().fillna(0)
-                self.backtest_result = self._backtest_stats()
                 break
             self._handle_events()
+        print("Finished running backtest")
 
     def _run_live(self, **kwargs):
         pass
@@ -72,14 +61,3 @@ class Trader:
             self.broker, SimBroker
         ):
             return True
-
-    def _backtest_stats(self) -> pd.DataFrame:
-        """Return strategy performance metrics from backtest."""
-        ret_stats = metrics.returns_stats(self.equity_rets)
-        return ret_stats
-
-    def plot(self):
-        self.balance_equity.equity.plot(
-            figsize=(16, 8), title="Daily Portfolio Value", ylabel="Value [$]"
-        )
-        plt.show()

@@ -50,6 +50,3 @@ if __name__ == "__main__":
     strategy = SMAStrategy(symbols=SYMBOLS, data=data_handler, broker=sim_broker)
     trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
     trader.run()
-
-    result = trader.backtest_result
-    trader.plot()

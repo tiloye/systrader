@@ -128,11 +128,8 @@ class SimBroker(Broker):
                 event.execute()
                 self.order_history.append(event)
             else:
-                print(
-                    f"{event.side} order rejected for {event.symbol}: "
-                    + f"Insufficient margin. Order cost: {cost:.2f}, "
-                    + f"Free margin: {self.free_margin:.2f}."
-                )
+                event.reject()
+                self.order_history.append(event)
 
         else:
             fill_event = FillEvent(

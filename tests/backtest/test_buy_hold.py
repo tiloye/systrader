@@ -3,6 +3,8 @@ import os
 import unittest
 from pathlib import Path
 
+import pandas as pd
+
 from examples.buy_hold_strategy import (
     BuyAndHoldStrategy,
     HistoricCSVDataHandler,
@@ -11,7 +13,7 @@ from examples.buy_hold_strategy import (
 )
 
 CSV_DIR = Path(__file__).parent
-SYMBOLS = ["AAPL"]
+SYMBOLS = ["SYMBOL1"]
 
 
 class TestTraderBacktest(unittest.TestCase):
@@ -25,7 +27,7 @@ class TestTraderBacktest(unittest.TestCase):
             ["2024-05-07", 110.0, 115.0, 108.0, 112.0, 112.0, 0],
         ]
 
-        with open(CSV_DIR / "AAPL.csv", "w") as csvfile:
+        with open(CSV_DIR / "SYMBOL1.csv", "w") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(
                 ["Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"]
@@ -49,24 +51,49 @@ class TestTraderBacktest(unittest.TestCase):
         self.assertTrue(hasattr(self.trader, "data_handler"))
         self.assertTrue(hasattr(self.trader, "strategy"))
 
-    def test_positions(self):
-        account_history = self.trader.account_history
-        pos_history = account_history["positions"]
+    def test_position_and_order_history(self):
+        pos_history = self.trader.account_history["positions"]
+        order_history = self.trader.account_history["orders"]
 
-        self.assertEqual(len(pos_history), 1)
-        self.assertEqual(pos_history.iloc[0].side, "BUY")
-        self.assertEqual(
-            pos_history.iloc[0].open_time.strftime("%Y-%m-%d"), "2024-05-03"
+        expected_pos_history = pd.DataFrame(
+            data={
+                "symbol": "SYMBOL1",
+                "units": 100,
+                "open_price": 102.0,
+                "close_price": 112.0,
+                "commission": 0.0,
+                "side": "BUY",
+                "open_time": pd.to_datetime("2024-05-03"),
+                "pnl": 1000.0,
+                "id": 1,
+                "close_time": pd.to_datetime("2024-05-07"),
+            },
+            index=[0],
         )
-        self.assertEqual(
-            pos_history.iloc[0].close_time.strftime("%Y-%m-%d"), "2024-05-07"
+        expected_order_history = pd.DataFrame(
+            data={
+                "type": ["ORDER"] * 2,
+                "timeindex": [
+                    pd.to_datetime("2024-05-03"),
+                    pd.to_datetime("2024-05-07"),
+                ],
+                "symbol": ["SYMBOL1"] * 2,
+                "order_type": ["MKT"] * 2,
+                "units": [100] * 2,
+                "side": ["BUY", "SELL"],
+                "status": ["EXECUTED"] * 2,
+                "id": [1, 2],
+                "pos_id": [1] * 2,
+            }
         )
-        self.assertEqual(pos_history.iloc[0].pnl, 1000.0)
+
+        pd.testing.assert_frame_equal(pos_history, expected_pos_history)
+        pd.testing.assert_frame_equal(order_history, expected_order_history)
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(CSV_DIR / "AAPL.csv"):
-            os.remove(CSV_DIR / "AAPL.csv")
+        if os.path.exists(CSV_DIR / "SYMBOL1.csv"):
+            os.remove(CSV_DIR / "SYMBOL1.csv")
 
 
 if __name__ == "__main__":

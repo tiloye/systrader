@@ -3,6 +3,8 @@ import os
 import unittest
 from pathlib import Path
 
+import pandas as pd
+
 from examples.sma_strategy import (
     HistoricCSVDataHandler,
     SimBroker,
@@ -11,7 +13,7 @@ from examples.sma_strategy import (
 )
 
 CSV_DIR = Path(__file__).parent
-SYMBOLS = ["AAPL"]
+SYMBOLS = ["SYMBOL1"]
 
 
 class TestTraderBacktest(unittest.TestCase):
@@ -30,7 +32,7 @@ class TestTraderBacktest(unittest.TestCase):
             ["2024-05-10", 107.0, 111.0, 105.0, 108.0],  # SMA = 106.67 -> Hold
         ]
 
-        with open(CSV_DIR / "AAPL.csv", "w") as csvfile:
+        with open(CSV_DIR / "SYMBOL1.csv", "w") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(
                 ["Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"]
@@ -54,26 +56,64 @@ class TestTraderBacktest(unittest.TestCase):
         self.assertTrue(hasattr(self.trader, "data_handler"))
         self.assertTrue(hasattr(self.trader, "strategy"))
 
-    def test_positions(self):
-        account_history = self.trader.account_history
-        pos_history = account_history["positions"]
-        # open_position = self.trader.broker.get_position("AAPL")
+    def test_position_and_order_history(self):
+        pos_history = self.trader.account_history["positions"]
+        order_history = self.trader.account_history["orders"]
 
-        self.assertEqual(len(pos_history), 4)
-        self.assertEqual(pos_history.iloc[0].side, "SELL")
-        self.assertEqual(
-            pos_history.iloc[0].open_time.strftime("%Y-%m-%d"), "2024-05-04"
+        expected_pos_history = pd.DataFrame(
+            data={
+                "symbol": ["SYMBOL1"] * 4,
+                "units": [100] * 4,
+                "open_price": [104.0, 109.0, 105.0, 107.0],
+                "close_price": [109.0, 105.0, 107.0, 108.0],
+                "commission": [0.0] * 4,
+                "side": ["SELL", "BUY", "SELL", "BUY"],
+                "open_time": [
+                    pd.to_datetime("2024-05-04"),
+                    pd.to_datetime("2024-05-06"),
+                    pd.to_datetime("2024-05-07"),
+                    pd.to_datetime("2024-05-09"),
+                ],
+                "pnl": [-500.0, -400.0, -200, 100.0],
+                "id": [1, 2, 3, 4],
+                "close_time": [
+                    pd.to_datetime("2024-05-06"),
+                    pd.to_datetime("2024-05-07"),
+                    pd.to_datetime("2024-05-09"),
+                    pd.to_datetime("2024-05-10"),
+                ],
+            },
         )
-        self.assertEqual(
-            pos_history.iloc[0].close_time.strftime("%Y-%m-%d"), "2024-05-06"
+        expected_order_history = pd.DataFrame(
+            data={
+                "type": ["ORDER"] * 8,
+                "timeindex": [
+                    pd.to_datetime("2024-05-04"),
+                    pd.to_datetime("2024-05-06"),
+                    pd.to_datetime("2024-05-06"),
+                    pd.to_datetime("2024-05-07"),
+                    pd.to_datetime("2024-05-07"),
+                    pd.to_datetime("2024-05-09"),
+                    pd.to_datetime("2024-05-09"),
+                    pd.to_datetime("2024-05-10"),
+                ],
+                "symbol": ["SYMBOL1"] * 8,
+                "order_type": ["MKT"] * 8,
+                "units": [100] * 8,
+                "side": ["SELL", "BUY", "BUY", "SELL", "SELL", "BUY", "BUY", "SELL"],
+                "status": ["EXECUTED"] * 8,
+                "id": list(range(1, 9)),
+                "pos_id": [1, 1, 2, 2, 3, 3, 4, 4],
+            }
         )
-        self.assertEqual(pos_history.pnl.sum(), -1000.0)
-        # self.assertEqual(open_position.pnl, 100)
+
+        pd.testing.assert_frame_equal(pos_history, expected_pos_history)
+        pd.testing.assert_frame_equal(order_history, expected_order_history)
 
     @classmethod
     def tearDownClass(cls):
-        if os.path.exists(CSV_DIR / "AAPL.csv"):
-            os.remove(CSV_DIR / "AAPL.csv")
+        if os.path.exists(CSV_DIR / "SYMBOL1.csv"):
+            os.remove(CSV_DIR / "SYMBOL1.csv")
 
 
 if __name__ == "__main__":

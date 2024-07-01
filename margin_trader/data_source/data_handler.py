@@ -1,7 +1,13 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from margin_trader.event import MarketEvent
+
+if TYPE_CHECKING:
+    from queue import Queue
 
 
 class DataHandler(ABC):
@@ -17,13 +23,74 @@ class DataHandler(ABC):
     system will be treated identically by the rest of the backtesting suite.
     """
 
+    symbol_data = {}
+    latest_symbol_data = {}
+
+    def get_latest_bars(self, symbol: str, N: int = 1):
+        """
+        Return the last N bars from the latest_symbol list, or N-k if less available.
+
+        Parameters
+        ----------
+        symbol
+            The symbol to get the latest bars for.
+        N
+            The number of bars to return, by default 1.
+
+        Returns
+        -------
+        list
+            The last N bars for the symbol.
+        """
+        try:
+            bars_list = self.latest_symbol_data[symbol]
+        except KeyError:
+            print("That symbol is not available in the historical dataset.")
+        else:
+            return bars_list[-N:]
+
+    def get_latest_price(self, symbol: str, price: str = "close"):
+        """
+        Return the latest price for a symbol.
+
+        Parameters
+        ----------
+        symbol
+            The symbol to get the latest price for.
+        price
+            The price type to return ("open", "high", "low", "close"),
+            by default "close".
+
+        Returns
+        -------
+        float
+            The latest price for the symbol.
+        """
+        latest_bar = self.get_latest_bars(symbol)
+        if price == "open":
+            return latest_bar[0].open
+        elif price == "high":
+            return latest_bar[0].high
+        elif price == "low":
+            return latest_bar[0].low
+        return latest_bar[0].close
+
     @abstractmethod
-    def get_latest_bars(self, symbol, N=1):
+    def get_new_bar(self, symbol: str):
         """
-        Returns the last N bars from the latest_symbol list,
-        or fewer if less bars are available.
+        Return the latest bar from a data feed as a named tuple.
+
+        Parameters
+        ----------
+        symbol
+            The symbol to get the latest bar for.
+
+        Returns
+        -------
+        namedtuple
+            The latest bar for the symbol.
         """
-        raise NotImplementedError("Should implement get_latest_bars()")
+        raise NotImplementedError("Should implement get_new_bar()")
 
     @abstractmethod
     def update_bars(self):
@@ -52,7 +119,7 @@ class BacktestDataHandler(DataHandler):
 
     Attributes
     ----------
-    symbol_list : list
+    symbols : list
         A list of symbols to backtest.
     symbol_data : dict
         A dictionary to store the data for each symbol.
@@ -78,8 +145,6 @@ class BacktestDataHandler(DataHandler):
         use_cols: list[str] | None = None,
     ):
         self.symbols = symbols if isinstance(symbols, list) else [symbols]
-        self.symbol_data = {}
-        self.latest_symbol_data = {}
         self.start_date = start_date
         self.end_date = end_date
         self.continue_backtest = True
@@ -88,7 +153,7 @@ class BacktestDataHandler(DataHandler):
 
         self._prepare_data()
 
-    def add_event_queue(self, event_queue):
+    def add_event_queue(self, event_queue: Queue):
         self.events = event_queue
 
     def _prepare_data(self):
@@ -127,7 +192,7 @@ class BacktestDataHandler(DataHandler):
         """
         raise NotImplementedError("Should implement loading symbol data from source")
 
-    def _get_new_bar(self, symbol: str):
+    def get_new_bar(self, symbol: str):
         """
         Return the latest bar from the data feed as a named tuple.
 
@@ -143,55 +208,6 @@ class BacktestDataHandler(DataHandler):
         """
         return next(self.symbol_data[symbol])
 
-    def get_latest_bars(self, symbol: str, N: int = 1):
-        """
-        Return the last N bars from the latest_symbol list, or N-k if less available.
-
-        Parameters
-        ----------
-        symbol
-            The symbol to get the latest bars for.
-        N
-            The number of bars to return, by default 1.
-
-        Returns
-        -------
-        list
-            The last N bars for the symbol.
-        """
-        try:
-            bars_list = self.latest_symbol_data[symbol]
-        except KeyError:
-            print("That symbol is not available in the historical data set.")
-        else:
-            return bars_list[-N:]
-
-    def get_latest_price(self, symbol: str, price: str = "close"):
-        """
-        Return the latest price for a symbol.
-
-        Parameters
-        ----------
-        symbol
-            The symbol to get the latest price for.
-        price
-            The price type to return ("open", "high", "low", "close"),
-            by default "close".
-
-        Returns
-        -------
-        float
-            The latest price for the symbol.
-        """
-        latest_bar = self.get_latest_bars(symbol)
-        if price == "open":
-            return latest_bar[0].open
-        elif price == "high":
-            return latest_bar[0].high
-        elif price == "low":
-            return latest_bar[0].low
-        return latest_bar[0].close
-
     def update_bars(self):
         """
         Push the latest bar to the latest_symbol_data structure for all symbols
@@ -201,7 +217,7 @@ class BacktestDataHandler(DataHandler):
         if self.symbol_data:
             for s in self.symbol_data:
                 try:
-                    bar = self._get_new_bar(s)
+                    bar = self.get_new_bar(s)
                 except StopIteration:
                     self.continue_backtest = False
                 else:

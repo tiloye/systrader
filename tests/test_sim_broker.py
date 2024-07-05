@@ -1,5 +1,3 @@
-import csv
-import os
 import unittest
 from pathlib import Path
 from queue import Queue
@@ -9,29 +7,11 @@ import pandas as pd
 from margin_trader.broker.sim_broker import PositionManager, SimBroker
 from margin_trader.data_source import HistoricCSVDataHandler
 
-CSV_DIR = Path(__file__).parent
-SYMBOLS = ["AAPL"]
+CSV_DIR = Path(__file__).parent.joinpath("data")
+SYMBOLS = ["SYMBOL1"]
 
 
 class TestSimBroker(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        data = [
-            ["2024-05-03", 100.0, 105.0, 98.0, 102.0, 102.0, 0],
-            ["2024-05-04", 102.0, 108.0, 100.0, 106.0, 106.0, 0],
-            ["2024-05-05", 106.0, 110.0, 104.0, 108.0, 108.0, 0],
-            ["2024-05-06", 108.0, 112.0, 106.0, 110.0, 110.0, 0],
-            ["2024-05-07", 110.0, 115.0, 108.0, 112.0, 112.0, 0],
-        ]
-
-        with open(CSV_DIR / "AAPL.csv", "w") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(
-                ["Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"]
-            )
-            for day in data:
-                writer.writerow(day)
-
     def setUp(self):
         self.event_queue = Queue()
         self.data_handler = HistoricCSVDataHandler(csv_dir=CSV_DIR, symbols=SYMBOLS)
@@ -44,13 +24,13 @@ class TestSimBroker(unittest.TestCase):
         self.data_handler.update_bars()  # Add market event to the event queue
 
     def run_buy_workflow(
-        self, symbol="AAPL", exec_price="current", output_event="fill"
+        self, symbol="SYMBOL1", exec_price="current", output_event="fill"
     ):
         if exec_price == "current":
             self.broker.buy(symbol)
             order_event = self.event_queue.get(False)
         else:
-            self.broker.buy("AAPL")
+            self.broker.buy("SYMBOL1")
             self.broker.check_pending_orders()
             order_event = self.event_queue.get(False)
         if output_event == "order":
@@ -59,7 +39,7 @@ class TestSimBroker(unittest.TestCase):
         fill_event = self.event_queue.get(False)
         return fill_event
 
-    def run_close_workflow(self, symbol="AAPL"):
+    def run_close_workflow(self, symbol="SYMBOL1"):
         self.broker.close(symbol)
         order_event = self.event_queue.get(False)
         self.broker.execute_order(order_event)
@@ -89,14 +69,14 @@ class TestSimBroker(unittest.TestCase):
         event = self.run_buy_workflow(output_event="order")
 
         self.assertEqual(event.type, "ORDER")
-        self.assertEqual(event.symbol, "AAPL")
+        self.assertEqual(event.symbol, "SYMBOL1")
         self.assertEqual(event.side, "BUY")
         self.assertEqual(event.units, 100)
         self.assertEqual(event.order_type, "MKT")
 
     def test_sell(self):
         _ = self.event_queue.get(False)
-        symbol = "AAPL"
+        symbol = "SYMBOL1"
         self.broker.sell(symbol)
         event = self.event_queue.get(False)
 
@@ -184,9 +164,9 @@ class TestSimBroker(unittest.TestCase):
             }
         ]
 
-        self.assertIn("AAPL", self.broker.get_positions())
-        self.assertEqual(self.broker.get_position("AAPL").units, 100.0)
-        self.assertEqual(self.broker.get_position("AAPL").fill_price, 102.0)
+        self.assertIn("SYMBOL1", self.broker.get_positions())
+        self.assertEqual(self.broker.get_position("SYMBOL1").units, 100.0)
+        self.assertEqual(self.broker.get_position("SYMBOL1").fill_price, 102.0)
         self.assertEqual(self.broker.balance, 100_000.0)
         self.assertEqual(self.broker.equity, 100_000.0)
         self.assertEqual(self.broker.free_margin, 89_800.0)
@@ -219,8 +199,8 @@ class TestSimBroker(unittest.TestCase):
         fill_event = self.run_close_workflow()
         self.broker.update_account(fill_event)
 
-        self.assertNotIn("AAPL", self.broker.get_positions())
-        self.assertEqual("AAPL", self.broker.get_positions_history()[-1].symbol)
+        self.assertNotIn("SYMBOL1", self.broker.get_positions())
+        self.assertEqual("SYMBOL1", self.broker.get_positions_history()[-1].symbol)
         self.assertEqual(
             self.broker.get_positions_history()[-1].close_time,
             self.data_handler.current_datetime,
@@ -329,11 +309,6 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(closed_position.pnl, 599.0)
         self.assertEqual(closed_position.open_time.strftime("%Y-%m-%d"), "2024-05-03")
         self.assertEqual(closed_position.close_time.strftime("%Y-%m-%d"), "2024-05-04")
-
-    @classmethod
-    def tearDownClass(cls):
-        if os.path.exists(CSV_DIR / "AAPL.csv"):
-            os.remove(CSV_DIR / "AAPL.csv")
 
 
 if __name__ == "__main__":

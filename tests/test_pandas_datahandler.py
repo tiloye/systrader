@@ -7,7 +7,7 @@ import pandas as pd
 from margin_trader.data_source import PandasDataHandler
 
 
-class TestHistoricalCSVDataHandler(unittest.TestCase):
+class TestPandasDataHandler(unittest.TestCase):
     def test_initialisation(self):
         data = [
             ["2024-05-03", 100.0, 105.0, 98.0, 102.0, 0],

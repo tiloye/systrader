@@ -23,8 +23,9 @@ class DataHandler(ABC):
     system will be treated identically by the rest of the backtesting suite.
     """
 
-    symbol_data = {}
-    latest_symbol_data = {}
+    def __init__(self):
+        self.symbol_data = {}
+        self.latest_symbol_data = {}
 
     def get_latest_bars(self, symbol: str, N: int = 1):
         """
@@ -144,6 +145,7 @@ class BacktestDataHandler(DataHandler):
         end_date: str | datetime | None = None,
         use_cols: list[str] | None = None,
     ):
+        super().__init__()
         self.symbols = symbols if isinstance(symbols, list) else [symbols]
         self.start_date = start_date
         self.end_date = end_date

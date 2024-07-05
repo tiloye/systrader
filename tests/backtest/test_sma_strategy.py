@@ -13,7 +13,7 @@ from examples.sma_strategy import (
 )
 
 CSV_DIR = Path(__file__).parent
-SYMBOLS = ["SYMBOL1"]
+SYMBOLS = ["SMA_SYMBOL1"]
 
 
 class TestTraderBacktest(unittest.TestCase):
@@ -32,7 +32,7 @@ class TestTraderBacktest(unittest.TestCase):
             ["2024-05-10", 107.0, 111.0, 105.0, 108.0],  # SMA = 106.67 -> Hold
         ]
 
-        with open(CSV_DIR / "SYMBOL1.csv", "w") as csvfile:
+        with open(CSV_DIR / "SMA_SYMBOL1.csv", "w") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(
                 ["Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"]
@@ -50,6 +50,11 @@ class TestTraderBacktest(unittest.TestCase):
         )
         cls.trader.run()
 
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists(CSV_DIR / "SMA_SYMBOL1.csv"):
+            os.remove(CSV_DIR / "SMA_SYMBOL1.csv")
+
     def test_init(self):
         self.assertTrue(hasattr(self.trader, "events"))
         self.assertTrue(hasattr(self.trader, "broker"))
@@ -62,7 +67,7 @@ class TestTraderBacktest(unittest.TestCase):
 
         expected_pos_history = pd.DataFrame(
             data={
-                "symbol": ["SYMBOL1"] * 4,
+                "symbol": ["SMA_SYMBOL1"] * 4,
                 "units": [100] * 4,
                 "open_price": [104.0, 109.0, 105.0, 107.0],
                 "close_price": [109.0, 105.0, 107.0, 108.0],
@@ -97,7 +102,7 @@ class TestTraderBacktest(unittest.TestCase):
                     pd.to_datetime("2024-05-09"),
                     pd.to_datetime("2024-05-10"),
                 ],
-                "symbol": ["SYMBOL1"] * 8,
+                "symbol": ["SMA_SYMBOL1"] * 8,
                 "order_type": ["MKT"] * 8,
                 "units": [100] * 8,
                 "side": ["SELL", "BUY", "BUY", "SELL", "SELL", "BUY", "BUY", "SELL"],
@@ -109,11 +114,6 @@ class TestTraderBacktest(unittest.TestCase):
 
         pd.testing.assert_frame_equal(pos_history, expected_pos_history)
         pd.testing.assert_frame_equal(order_history, expected_order_history)
-
-    @classmethod
-    def tearDownClass(cls):
-        if os.path.exists(CSV_DIR / "SYMBOL1.csv"):
-            os.remove(CSV_DIR / "SYMBOL1.csv")
 
 
 if __name__ == "__main__":

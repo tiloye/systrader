@@ -13,7 +13,7 @@ class BuyAndHoldStrategy(Strategy):
     as well as a benchmark upon which to compare other strategies.
     """
 
-    def calculate_signals(self, event):
+    def on_market(self, event):
         """
         For "Buy and Hold" we generate a single signal per symbol
         and then no additional signals. This means we are
@@ -23,12 +23,12 @@ class BuyAndHoldStrategy(Strategy):
         Parameters
         event - A MarketEvent object.
         """
-        if event.type == "MARKET":
-            for s in self.symbols:
-                if s not in self.broker.get_positions():
-                    bars = self.data.get_latest_bars(s, N=1)
-                    if bars is not None and bars != []:
-                        self.broker.buy(s)
+
+        for s in self.symbols:
+            if s not in self.broker.get_positions():
+                bars = self.data.get_latest_bars(s, N=1)
+                if bars is not None and bars != []:
+                    self.broker.buy(s)
 
 
 if __name__ == "__main__":

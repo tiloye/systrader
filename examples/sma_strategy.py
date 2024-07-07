@@ -1,5 +1,5 @@
 from margin_trader.broker import SimBroker
-from margin_trader.data_source import HistoricCSVDataHandler
+from margin_trader.data_handlers import HistoricCSVDataHandler
 from margin_trader.strategy import Strategy
 from margin_trader.trader import Trader
 

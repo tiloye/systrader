@@ -1,7 +1,7 @@
-from .csv_data_handler import HistoricCSVDataHandler
+from ._csv import HistoricCSVDataHandler
+from ._pandas import PandasDataHandler
 from .data_handler import BacktestDataHandler, DataHandler
-from .pandas_data_handler import PandasDataHandler
-from .yahoo_data_handler import YahooDataHandler
+from .yahoo import YahooDataHandler
 
 __all__ = [
     "HistoricCSVDataHandler",

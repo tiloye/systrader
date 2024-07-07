@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from margin_trader.data_source import YahooDataHandler
+from margin_trader.data_handlers import YahooDataHandler
 
 data = {
     "Open": [100.0, 102.0, 104.0],
@@ -14,10 +14,11 @@ data = {
     "Adj Close": [105.0, 106.5, 108.0],
     "Volume": [1000, 1500, 2000],
 }
+MOCK_SOURCE = "margin_trader.data_handlers.yahoo"
 
 
 class TestYahooDataHandler(unittest.TestCase):
-    @patch("margin_trader.data_source.yahoo_data_handler.yf")
+    @patch(MOCK_SOURCE + ".yf")
     def test_valid_symbols(self, mock_yfinance):
         mock_yfinance.download.return_value = pd.DataFrame(
             data,
@@ -69,8 +70,8 @@ class TestYahooDataHandler(unittest.TestCase):
                 ("Index", "open", "high", "low", "close", "volume"),
             )
 
-    @patch("margin_trader.data_source.yahoo_data_handler.yf")
-    @patch("margin_trader.data_source.yahoo_data_handler.shared")
+    @patch(MOCK_SOURCE + ".yf")
+    @patch(MOCK_SOURCE + ".shared")
     def test_invalid_symbol(self, mock_shared, mock_yf):
         with self.subTest("single_invalid_symbol"):
             mock_yf.download.return_value = pd.DataFrame(

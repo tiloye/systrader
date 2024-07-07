@@ -4,7 +4,7 @@ from queue import Queue
 
 import pandas as pd
 
-from margin_trader.data_source import PandasDataHandler
+from margin_trader.data_handlers import PandasDataHandler
 
 
 class TestPandasDataHandler(unittest.TestCase):

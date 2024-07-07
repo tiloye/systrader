@@ -1,7 +1,7 @@
 import queue
 
 from margin_trader.broker import SimBroker
-from margin_trader.data_source import BacktestDataHandler
+from margin_trader.data_handlers import BacktestDataHandler
 
 
 class Trader:

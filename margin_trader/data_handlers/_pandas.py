@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from margin_trader.data_source.data_handler import BacktestDataHandler
+from margin_trader.data_handlers.data_handler import BacktestDataHandler
 
 
 class PandasDataHandler(BacktestDataHandler):

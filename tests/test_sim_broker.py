@@ -5,7 +5,7 @@ from queue import Queue
 import pandas as pd
 
 from margin_trader.broker.sim_broker import PositionManager, SimBroker
-from margin_trader.data_source import HistoricCSVDataHandler
+from margin_trader.data_handlers import HistoricCSVDataHandler
 
 CSV_DIR = Path(__file__).parent.joinpath("data")
 SYMBOLS = ["SYMBOL1"]

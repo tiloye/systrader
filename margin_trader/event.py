@@ -37,6 +37,8 @@ class OrderEvent(Event):
 
     Parameters
     ----------
+    timestamp:
+        The time when the Order was created.
     symbol : str
         The symbol to trade.
     order_type : str
@@ -45,6 +47,11 @@ class OrderEvent(Event):
         Non-negative integer for order quantity.
     side : str
         'BUY' or 'SELL' for long or short.
+    order_id: int
+        The ID of the order.
+    position_id: int
+        The ID of the position an order should operate on. It should only be use when
+        closing positions.
 
     Attributes
     ----------
@@ -60,22 +67,32 @@ class OrderEvent(Event):
         'BUY' or 'SELL' for long or short.
     status : str
         The status of the order.
-    id : int
+    order_id : int
         The ID of the order.
+    position_id: int
+        The ID of the position an order should operate on. It should only be use when
+        closing positions.
     """
 
     def __init__(
-        self, timeindex: datetime, symbol: str, order_type: str, units: int, side: str
+        self,
+        timestamp: datetime,
+        symbol: str,
+        order_type: str,
+        units: int,
+        side: str,
+        order_id: int = 0,
+        position_id: int = 0,
     ) -> None:
         self.type = "ORDER"
-        self.timeindex = timeindex
+        self.timestamp = timestamp
         self.symbol = symbol
         self.order_type = order_type
         self.units = units
         self.side = side
         self.status = "PENDING"
-        self.id = 0
-        self.pos_id = 0
+        self.order_id = order_id
+        self.position_id = position_id
 
     def execute(self) -> None:
         self.status = "EXECUTED"
@@ -103,8 +120,8 @@ class FillEvent(Event):
 
     Parameters
     ----------
-    timeindex : datetime
-        The bar-resolution when the order was filled.
+    timestamp : datetime
+        The time when the order was filled.
     symbol : str
         The symbol which was filled.
     units : int
@@ -113,18 +130,20 @@ class FillEvent(Event):
         The direction of fill ('BUY' or 'SELL')
     fill_price : float
         The price the order was filled.
-    commission : float, optional
+    commission : float
         An optional commission sent from IB.
-    result : str, optional
+    result : str
         The position outcome of an executed order ("open" or "close").
-    id : int, optional
-        The order ID for tracking the position.
+    order_id : int
+        The ID of the order that triggered the position.
+    position_id: int
+        The ID needed for closing an open position.
 
     Attributes
     ----------
     type : str
         The type of the event, in this case 'FILL'.
-    timeindex : datetime
+    timestamp : datetime
         The bar-resolution when the order was filled.
     symbol : str
         The symbol which was filled.
@@ -138,30 +157,34 @@ class FillEvent(Event):
         The commission of the trade from the brokerage.
     result : str
         The position outcome of an executed order ("open" or "close").
-    id : int
+    order_id : int
         The order ID for tracking the position.
+    position_id: int
+        The ID needed for closing an open position.
     """
 
     def __init__(
         self,
-        timeindex: datetime,
+        timestamp: datetime,
         symbol: str,
         units: int,
         side: str,
         fill_price: float,
         commission: float = 0.0,
         result: str = "open",
-        id: int = 0,
+        order_id: int = 0,
+        position_id: int = 0,
     ) -> None:
         self.type = "FILL"
-        self.timeindex = timeindex
+        self.timestamp = timestamp
         self.symbol = symbol
         self.units = units
         self.side = side
         self.fill_price = fill_price
         self.commission = commission
         self.result = result
-        self.id = id
+        self.order_id = order_id
+        self.position_id = position_id
 
     @property
     def is_close(self) -> bool:

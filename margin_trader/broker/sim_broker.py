@@ -1,12 +1,13 @@
-from __future__ import annotations
-
-from copy import deepcopy
-from datetime import datetime
 from queue import Queue
 
 import pandas as pd
 
-from margin_trader.broker import Broker
+from margin_trader.broker.broker import Broker
+from margin_trader.broker.position import (
+    HedgePositionManager,
+    NetPositionManager,
+    Position,
+)
 from margin_trader.data_handlers import BacktestDataHandler
 from margin_trader.event import Event, FillEvent, MarketEvent, OrderEvent
 
@@ -24,6 +25,8 @@ class SimBroker(Broker):
         The data handler providing market data.
     balance : int or float, optional
         The initial balance of the account. Default is 100_000.
+    acct_mode: str
+        The account mode (netting or hedging) managing positions. Default is netting.
     leverage : int, optional
         The leverage for trading. Default is 1.
     commission : int or float, optional
@@ -56,14 +59,18 @@ class SimBroker(Broker):
     pending_orders : Queue
         A queue to store pending orders waiting for execution.
     account_history : list[dict]
-        A list of dictionaries storing historical account data
-        (timeindex, balance, equity).
+        A list of dictionaries, with keys  storing historical account data.
+        The dictionary has the following keys:
+        * timestamp
+        * balance
+        * equity
     """
 
     def __init__(
         self,
         data_handler: BacktestDataHandler,
         balance: int | float = 100_000,
+        acct_mode: str = "netting",
         leverage: int = 1,
         commission: float = 0.0,
         stop_out_level: float = 0.2,
@@ -73,16 +80,21 @@ class SimBroker(Broker):
         self.equity = balance
         self.free_margin = balance
         self.data_handler = data_handler
+        self.acct_mode = acct_mode
         self.leverage = leverage
         self.commission = commission
-        self.p_manager = PositionManager()
-        self._exec_price = exec_price
         self.pending_orders = Queue()
         self.account_history = []
         self.order_history = []
+        self.p_manager: NetPositionManager | HedgePositionManager = (
+            NetPositionManager(self.data_handler)
+            if acct_mode == "netting"
+            else HedgePositionManager(self.data_handler)
+        )
+        self._exec_price = exec_price
         self.__order_id = 1
-        self.__position_id = 1
         self.__stop_out_level = stop_out_level
+        self.__pos_hist_total = len(self.p_manager.history)  # For balance updates
 
     def add_event_queue(self, event_queue: Queue[Event]) -> None:
         self.events = event_queue
@@ -105,14 +117,13 @@ class SimBroker(Broker):
         if not isinstance(event, OrderEvent):
             raise TypeError("Expected an order event object")
 
-        order = self.__check_order(event)
         if event.order_type == "MKT":
             if self._exec_price == "next":
                 price = self.data_handler.get_latest_price(event.symbol, "open")
             else:
                 price = self.data_handler.get_latest_price(event.symbol)
 
-        if order == "OPEN":
+        if self.__order_req(event) == "open":  # Open new position
             cost = (event.units * price) / self.leverage
             if cost < self.free_margin:
                 fill_event = FillEvent(
@@ -122,7 +133,8 @@ class SimBroker(Broker):
                     event.side,
                     price,
                     self.commission,
-                    id=event.pos_id,
+                    order_id=event.order_id,
+                    position_id=event.position_id,
                 )
                 self.events.put(fill_event)
                 event.execute()
@@ -131,7 +143,7 @@ class SimBroker(Broker):
                 event.reject()
                 self.order_history.append(event)
 
-        else:
+        else:  # Close an existing position
             fill_event = FillEvent(
                 self.data_handler.current_datetime,
                 event.symbol,
@@ -140,41 +152,22 @@ class SimBroker(Broker):
                 price,
                 self.commission,
                 "close",
-                event.pos_id,
+                event.order_id,
+                event.position_id,
             )
             self.events.put(fill_event)
             event.execute()
             self.order_history.append(event)
 
-    def __check_order(self, event: OrderEvent) -> str:
-        """
-        Check if an order event is to open or close a position.
+    def __order_req(self, order: OrderEvent) -> str:
+        if self.acct_mode == "netting":
+            return "open"
+        else:  # If order was submitted by calling broker.close(position) in hedging mode
+            if order.position_id == order.order_id:
+                return "open"
+            return "close"
 
-        Parameters
-        ----------
-        event
-            The order event to check.
-
-        Returns
-        -------
-        str
-            "OPEN" if opening a position, "CLOSE" if closing a position.
-        """
-
-        symbol = event.symbol
-        side = event.side
-        position = self.p_manager.positions.get(symbol, False)
-        if position and position.side != side and position.id == event.pos_id:
-            return "CLOSE"
-        return "OPEN"
-
-    def buy(
-        self,
-        symbol: str,
-        order_type: str = "MKT",
-        units: int = 100,
-        id: int | None = None,
-    ) -> None:
+    def buy(self, symbol: str, order_type: str = "MKT", units: int = 100) -> None:
         """
         Buy x units of symbol.
 
@@ -186,19 +179,13 @@ class SimBroker(Broker):
             The type of order, default is "MKT".
         units
             The number of units to buy, default is 100.
-        id
-            Used by the system to determine if an order should open a position or
-            modify an existing position. It should not be set by the user.
         """
-        self.__create_order(symbol, order_type, "BUY", units, id)
+        if order_type != "MKT":
+            raise ValueError("Order type must be a Market Order (MKT)")
 
-    def sell(
-        self,
-        symbol: str,
-        order_type: str = "MKT",
-        units: int = 100,
-        id: int | None = None,
-    ) -> None:
+        self.__create_order(symbol, order_type, "BUY", units)
+
+    def sell(self, symbol: str, order_type: str = "MKT", units: int = 100) -> None:
         """
         Sell x units of symbol.
 
@@ -210,41 +197,45 @@ class SimBroker(Broker):
             The type of order, default is "MKT".
         units
             The number of units to sell, default is 100.
-        id
-            Used by the system to determine if an order should open a position or
-            modify an existing position. It should not be set by the user.
         """
-        self.__create_order(symbol, order_type, "SELL", units, id)
+        if order_type != "MKT":
+            raise ValueError("Order type must be a Market Order (MKT)")
 
-    def close(self, symbol: str, units: int = 100) -> None:
+        self.__create_order(symbol, order_type, "SELL", units)
+
+    def close(self, position: Position, units: int | None = None) -> None:
         """
         Close an existing position with an opposing order.
 
         Parameters
         ----------
-        symbol
-            The symbol of the position to close.
+        position
+            The position to close.
         units
-            The number of units to close, default is 100.
+            The number of units to close. If no units is given,
+            the full position will be closed
         """
-        position = self.get_position(symbol)
-        if position:
-            side = position.side
-            if side == "BUY":
-                self.sell(symbol, units=units, id=position.id)
-            else:
-                self.buy(symbol, units=units, id=position.id)
+        if not isinstance(position, Position):
+            raise TypeError(
+                "Only 'Position' objects can be closed."
+                + f" Got '{type(position).__name__}' object instead."
+            )
+
+        side = position.side
+        units = units if units is not None else position.units
+        if side == "BUY":
+            self.__create_order(position.symbol, "MKT", "SELL", units, position.id)
         else:
-            print(f"There is no open position for {symbol}")
+            self.__create_order(position.symbol, "MKT", "BUY", units, position.id)
 
     def close_all_positions(self) -> None:
         """Close all open positions."""
 
         def close_all(positions):
-            for symbol in positions:
-                self.close(symbol, units=positions[symbol].units)
+            for p in positions:
+                self.close(p)
 
-        positions = self.get_positions()
+        positions = self.get_positions().values()
         if positions:
             if self.data_handler.continue_backtest:
                 close_all(positions)
@@ -260,7 +251,7 @@ class SimBroker(Broker):
         order_type: str,
         side: str,
         units: int = 100,
-        id: int | None = None,
+        position_id: int = 0,
     ) -> None:
         """
         Create an order event.
@@ -275,9 +266,9 @@ class SimBroker(Broker):
             The side of the order, either "BUY" or "SELL".
         units
             The number of units, default is 100.
-        id
-            Used by the system to determine if an order should open a position or
-            modify an existing position.
+        position_id
+            The position ID of an existing position. If the value is less than the order
+            ID, then the order will close or reverse an existing position.
         """
         order = OrderEvent(
             self.data_handler.current_datetime,
@@ -285,16 +276,10 @@ class SimBroker(Broker):
             order_type=order_type,
             units=units,
             side=side,
+            order_id=self.__order_id,
+            position_id=position_id if position_id != 0 else self.__order_id,
         )
-        if id is not None:
-            order.pos_id = id
-            order.id = self.__order_id
-            self.__order_id += 1
-        else:
-            order.id = self.__order_id
-            order.pos_id = self.__position_id
-            self.__order_id += 1
-            self.__position_id += 1
+        self.__order_id += 1
 
         if order.order_type == "MKT":
             if self._exec_price == "current":
@@ -329,31 +314,33 @@ class SimBroker(Broker):
         self.__update_positions(event)
         self.__update_fund_values(event)
         self.__update_account_history(event)
+        self.__pos_hist_total = len(self.get_positions_history())
         if self.__margin_call():
             self._stop_simulation()
 
     def __update_positions(self, event: MarketEvent | FillEvent) -> None:
         """Update positions based on market or fill events."""
         if isinstance(event, MarketEvent):
-            self.__update_positions_from_price()
+            self.__update_positions_on_market()
         elif isinstance(event, FillEvent):
-            self.__update_positions_from_fill(event)
+            self.__update_positions_on_fill(event)
             if event.result == "open" and self._exec_price == "next":
                 # Update the PnL of an order executed at the open price.
-                self.p_manager.update_pnl(
-                    event.symbol, self.data_handler.get_latest_price(event.symbol)
-                )
+                position = self.get_position(event.symbol)
+                if isinstance(position, list):
+                    position[-1].update(
+                        self.data_handler.get_latest_price(event.symbol)
+                    )
+                elif isinstance(position, Position):
+                    position.update(self.data_handler.get_latest_price(event.symbol))
 
-    def __update_positions_from_fill(self, event: FillEvent) -> None:
+    def __update_positions_on_fill(self, event: FillEvent) -> None:
         """Add new positions to the porfolio"""
-        self.p_manager.update_position_from_fill(event)
+        self.p_manager.update_position_on_fill(event)
 
-    def __update_positions_from_price(self) -> None:
+    def __update_positions_on_market(self) -> None:
         """Update portfolio holdings with the latest market price"""
-        for symbol in self.get_positions():
-            self.p_manager.update_pnl(
-                symbol, self.data_handler.get_latest_price(symbol)
-            )
+        self.p_manager.update_position_on_market()
 
     def __update_fund_values(self, event: MarketEvent | FillEvent) -> None:
         if isinstance(event, MarketEvent):
@@ -366,7 +353,7 @@ class SimBroker(Broker):
 
     def __update_balance(self, event: FillEvent) -> None:
         """Update the account balance based on closed position from a fill event."""
-        if event.is_close:
+        if len(self.get_positions_history()) > self.__pos_hist_total:
             self.balance += self.p_manager.history[-1].pnl
 
     def __update_equity(self, event: MarketEvent | FillEvent) -> None:
@@ -380,15 +367,15 @@ class SimBroker(Broker):
 
     def __update_account_history(self, event: MarketEvent | FillEvent) -> None:
         """Update the account history based on market or fill events."""
-        timeindex = self.data_handler.current_datetime
+        timestamp = self.data_handler.current_datetime
         if isinstance(event, MarketEvent):
             self.account_history.append(
-                {"timeindex": timeindex, "balance": self.balance, "equity": self.equity}
+                {"timestamp": timestamp, "balance": self.balance, "equity": self.equity}
             )
         elif isinstance(event, FillEvent):
-            if event.result == "close":
+            if len(self.get_positions_history()) > self.__pos_hist_total:
                 recent_history = self.account_history[-1]
-                if timeindex == recent_history["timeindex"]:
+                if timestamp == recent_history["timestamp"]:
                     recent_history["balance"] = self.balance
                     recent_history["equity"] = self.equity
 
@@ -415,12 +402,12 @@ class SimBroker(Broker):
         float
             The current used margin.
         """
-        symbols = self.p_manager.positions.keys()
-        margin = sum(self.p_manager.positions[symbol].get_cost() for symbol in symbols)
+        positions = self.get_positions().values()
+        margin = sum(position.get_cost() for position in positions)
         margin = margin / self.leverage
         return margin
 
-    def get_position(self, symbol: str) -> Position:
+    def get_position(self, symbol: str) -> Position | list[Position] | None:
         """
         Get the current position for a given symbol.
 
@@ -431,19 +418,21 @@ class SimBroker(Broker):
 
         Returns
         -------
-        Position or bool
-            The current position for the symbol or False if no position exists.
+        Position
+            The current position for the symbol if account mode is Netting or list of
+            open position for the symbol if account mode is Hedging.
         """
-        return self.p_manager.positions.get(symbol, False)
+        return self.p_manager.get_position(symbol)
 
-    def get_positions(self) -> dict[str, Position]:
+    def get_positions(self) -> dict[str | int, Position]:
         """
-        Get all current positions.
+        Get all open positions.
 
         Returns
         -------
         dict
-            The current positions.
+            The positions dictionary. The keys are the symbol names if account
+            mode is netting or position ID if account mode is hedging.
         """
         return self.p_manager.positions
 
@@ -469,7 +458,7 @@ class SimBroker(Broker):
             and the positions history.
         """
         balance_equity = pd.DataFrame.from_records(self.account_history).set_index(
-            "timeindex"
+            "timestamp"
         )
 
         position_history = [vars(position) for position in self.get_positions_history()]
@@ -477,6 +466,20 @@ class SimBroker(Broker):
         position_history.rename(
             columns={"fill_price": "open_price", "last_price": "close_price"},
             inplace=True,
+        )
+        position_history = position_history.reindex(
+            columns=[
+                "symbol",
+                "side",
+                "units",
+                "open_price",
+                "close_price",
+                "commission",
+                "pnl",
+                "open_time",
+                "close_time",
+                "id",
+            ]
         )
 
         order_history = [vars(order) for order in self.order_history]
@@ -486,252 +489,3 @@ class SimBroker(Broker):
             "positions": position_history,
             "orders": order_history,
         }
-
-
-class PositionManager:
-    """
-    Keep track of open and closed positions based on filled orders.
-
-    Attributes
-    ----------
-    positions : dict
-        A dictionary of current open positions.
-    history : list
-        A list of closed positions.
-    """
-
-    def __init__(self) -> None:
-        self.positions = {}
-        self.history = []
-
-    def update_pnl(self, symbol: str, price: float) -> None:
-        """
-        Update position PnL from market event.
-
-        Parameters
-        ----------
-        symbol
-            The symbol of the position to update.
-        price
-            The latest market price.
-        """
-        self.positions[symbol].update(price)
-
-    def update_position_from_fill(self, event: FillEvent) -> None:
-        """
-        Add/remove a position based on recently filled order.
-
-        Parameters
-        ----------
-        event
-            The fill event to update positions from.
-        """
-        if event.result == "open":
-            self.__open_position(event)
-        else:
-            self.__close_position(event)
-
-    def __open_position(self, event: FillEvent) -> None:
-        """
-        Open a new position from a fill event.
-
-        Parameters
-        ----------
-        event
-            The fill event to open a position from.
-        """
-        position = self.positions.get(event.symbol, False)
-        if position:
-            position.add_position(event.fill_price, event.units)
-        else:
-            self.positions[event.symbol] = Position(
-                timeindex=event.timeindex,
-                symbol=event.symbol,
-                units=event.units,
-                fill_price=event.fill_price,
-                commission=event.commission,
-                side=event.side,
-                id=event.id,
-            )
-
-    def __close_position(self, event: FillEvent) -> None:
-        """
-        Close an existing position from a fill event.
-
-        Parameters
-        ----------
-        event
-            The fill event to close a position from.
-        """
-        position = self.positions.get(event.symbol, False)
-
-        def add_to_history(c_position, event):
-            c_position.commission += event.commission
-            c_position.update(event.fill_price)
-            c_position.update_close_time(event.timeindex)
-            self.history.append(c_position)
-
-        if position:
-            if event.units < position.units:
-                open_units = position.units - event.units
-                partial_position = deepcopy(position)
-                partial_position.reduce_position(
-                    event.fill_price, position.units - open_units
-                )
-                position.reduce_position(event.fill_price, event.units)
-                add_to_history(partial_position, event)
-            else:
-                add_to_history(position, event)
-                del self.positions[event.symbol]
-
-    def get_total_pnl(self) -> float:
-        """
-        Get the total PnL of all open positions.
-
-        Returns
-        -------
-        int
-            The total PnL of all open positions.
-        """
-        total_pnl = sum(self.positions[symbol].pnl for symbol in self.positions)
-        return total_pnl
-
-
-class Position:
-    """
-    Represent a trading position.
-
-    Parameters
-    ----------
-    timeindex : str or datetime
-        The time when the position was filled.
-    symbol : str
-        The symbol of the traded asset.
-    units : int or float
-        The number of units in the position.
-    fill_price : float
-        The price at which the position was filled.
-    commission : float or None
-        The commission for the trade.
-    side : str
-        The side of the position, either "BUY" or "SELL".
-
-    Attributes
-    ----------
-    symbol : str
-        The symbol of the traded asset.
-    units : int or float
-        The number of units in the position.
-    fill_price : float
-        The price at which the position was filled.
-    last_price : float
-        The last market price of the symbol.
-    commission : float
-        The commission for the trade.
-    side : str
-        The side of the position, either "BUY" or "SELL".
-    open_time : str or datetime
-        The time when the position was opened.
-    pnl : float
-        The profit and loss of the position.
-    close_time : str or datetime
-        The time when the position was closed.
-    """
-
-    def __init__(
-        self,
-        timeindex: str | datetime,
-        symbol: str,
-        units: int,
-        fill_price: float,
-        commission: float,
-        side: str,
-        id: int,
-    ):
-        self.symbol = symbol
-        self.units = units
-        self.fill_price = fill_price
-        self.last_price = fill_price
-        self.commission = commission
-        self.side = side
-        self.open_time = timeindex
-        self.pnl = 0.0
-        self.id = id
-
-    def update_pnl(self) -> None:
-        """Update the PnL of the position."""
-        pnl = (self.last_price - self.fill_price) * self.units
-        if self.side == "BUY":
-            self.pnl = pnl - self.commission
-        else:
-            self.pnl = -1 * pnl - self.commission
-
-    def update_last_price(self, price: float) -> None:
-        """
-        Update the last market price.
-
-        Parameters
-        ----------
-        price
-            The latest market price.
-        """
-        self.last_price = price
-
-    def update(self, price: float) -> None:
-        """
-        Update the position last price and PnL.
-
-        Parameters
-        ----------
-        price : float
-            The latest market price.
-        """
-        self.update_last_price(price)
-        self.update_pnl()
-
-    def update_close_time(self, timeindex: str | datetime) -> None:
-        """
-        Update the close time of the position.
-
-        Parameters
-        ----------
-        timeindex
-            The time when the position was closed.
-        """
-        self.close_time = timeindex
-
-    def get_cost(self) -> float:
-        """
-        Get the cost of the position.
-
-        Returns
-        -------
-        float
-            The cost of the position.
-        """
-        return self.fill_price * self.units
-
-    def add_position(self, price: float, units: int) -> None:
-        """Add more units to position."""
-        prev_price = self.fill_price
-        prev_units = self.units
-        curr_price = (prev_units * prev_price + units * price) / (prev_units + units)
-        self.fill_price = curr_price
-        self.units = prev_units + units
-        self.update(price)
-
-    def reduce_position(self, price: float, units: int) -> None:
-        self.units = self.units - units
-        self.update(price)
-
-    def __repr__(self) -> str:
-        """
-        Return a string representation of the position.
-
-        Returns
-        -------
-        str
-            A string representation of the position.
-        """
-        position = f"{self.symbol}|{self.side}|{self.units}|{self.pnl}"
-        return position

@@ -17,10 +17,10 @@ class TestPandasDataHandler(unittest.TestCase):
             ["2024-05-07", 110.0, 115.0, 108.0, 112.0, 0],
         ]
         df = pd.DataFrame(
-            data, columns=["timeindex", "open", "high", "low", "close", "volume"]
+            data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
-        df["timeindex"] = pd.to_datetime(df["timeindex"])
-        df.set_index("timeindex", inplace=True)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df.set_index("timestamp", inplace=True)
 
         event_queue = Queue()
         symbols_dfs = {"AAPL": df}

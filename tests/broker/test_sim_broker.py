@@ -4,10 +4,10 @@ from queue import Queue
 
 import pandas as pd
 
-from margin_trader.broker.sim_broker import PositionManager, SimBroker
+from margin_trader.broker.sim_broker import NetPositionManager, SimBroker
 from margin_trader.data_handlers import HistoricCSVDataHandler
 
-CSV_DIR = Path(__file__).parent.joinpath("data")
+CSV_DIR = Path(__file__).parent.parent.joinpath("data")
 SYMBOLS = ["SYMBOL1"]
 
 
@@ -40,7 +40,8 @@ class TestSimBroker(unittest.TestCase):
         return fill_event
 
     def run_close_workflow(self, symbol="SYMBOL1"):
-        self.broker.close(symbol)
+        position = self.broker.get_position(symbol)
+        self.broker.close(position, position.units)  # type: ignore
         order_event = self.event_queue.get(False)
         self.broker.execute_order(order_event)
         fill_event = self.event_queue.get(False)
@@ -59,10 +60,28 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(self.broker.events, self.event_queue)
         self.assertEqual(self.broker.leverage, 1)
         self.assertEqual(self.broker.commission, 0.5)
-        self.assertIsInstance(self.broker.p_manager, PositionManager)
+        self.assertIsInstance(self.broker.p_manager, NetPositionManager)
         self.assertEqual(self.broker._exec_price, "current")
         self.assertIsInstance(self.broker.pending_orders, Queue)
         self.assertListEqual(self.broker.account_history, [])
+
+    def test_get_used_margin_no_positions(self):
+        used_margin = self.broker.get_used_margin()
+        self.assertEqual(used_margin, 0.0)
+
+    def test_get_used_margin_open_positions(self):
+        _ = self.event_queue.get(False)
+        fill_event = self.run_buy_workflow()
+        self.broker.p_manager.update_position_on_fill(fill_event)
+        used_margin = self.broker.get_used_margin()
+
+        self.assertEqual(used_margin, 10_200.0)
+
+    def test_get_positions(self):
+        self.assertDictEqual(self.broker.get_positions(), {})
+
+    def test_get_position_history(self):
+        self.assertListEqual(self.broker.get_positions_history(), [])
 
     def test_buy(self):
         _ = self.event_queue.get(False)  # Generate signal from market event
@@ -86,19 +105,26 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(event.units, 100)
         self.assertEqual(event.order_type, "MKT")
 
+    def test_check_pending_orders(self):
+        self.broker._exec_price = "next"
+        _ = self.event_queue.get(False)
+        order_event = self.run_buy_workflow(exec_price="next", output_event="order")
+        self.assertEqual(order_event.status, "PENDING")
+        self.assertEqual(order_event.order_type, "MKT")
+
     def test_execute_order_same_bar_close(self):
         _ = self.event_queue.get(False)
         fill_event = self.run_buy_workflow()
         order_event = self.broker.order_history[-1]
 
         self.assertEqual(order_event.order_type, "MKT")
-        self.assertEqual(order_event.id, 1)
-        self.assertEqual(order_event.pos_id, 1)
+        self.assertEqual(order_event.order_id, 1)
+        self.assertEqual(order_event.position_id, 1)
         self.assertEqual(order_event.side, "BUY")
         self.assertEqual(order_event.units, 100)
-        self.assertEqual(order_event.timeindex.strftime("%Y-%m-%d"), "2024-05-03")
+        self.assertEqual(order_event.timestamp.strftime("%Y-%m-%d"), "2024-05-03")
         self.assertEqual(fill_event.side, "BUY")
-        self.assertEqual(fill_event.timeindex.strftime("%Y-%m-%d"), "2024-05-03")
+        self.assertEqual(fill_event.timestamp.strftime("%Y-%m-%d"), "2024-05-03")
         self.assertEqual(fill_event.fill_price, 102.0)
         self.assertEqual(fill_event.units, 100)
 
@@ -114,161 +140,6 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(position.fill_price, 100.0)
         self.assertEqual(position.last_price, 102.0)
         self.assertEqual(position.pnl, 200.0 - self.broker.commission)
-
-    def test_get_used_margin_no_positions(self):
-        used_margin = self.broker.get_used_margin()
-        self.assertEqual(used_margin, 0.0)
-
-    def test_get_used_margin_open_positions(self):
-        _ = self.event_queue.get(False)
-        fill_event = self.run_buy_workflow()
-        self.broker.p_manager.update_position_from_fill(fill_event)
-        used_margin = self.broker.get_used_margin()
-
-        self.assertEqual(used_margin, 10_200.0)
-
-    def test_get_position(self):
-        self.assertEqual(self.broker.get_position(SYMBOLS[0]), False)
-
-    def test_get_positions(self):
-        self.assertDictEqual(self.broker.get_positions(), {})
-
-    def test_get_position_history(self):
-        self.assertListEqual(self.broker.get_positions_history(), [])
-
-    def test_update_account_market_event(self):
-        mkt_event = self.event_queue.get(False)
-        self.broker.update_account(mkt_event)
-
-        self.assertDictEqual(self.broker.get_positions(), {})
-        self.assertEqual(self.broker.balance, 100_000.0)
-        self.assertEqual(self.broker.equity, 100_000.0)
-        self.assertEqual(self.broker.free_margin, 100_000.0)
-        recent_acct_history = self.broker.account_history[-1]
-        self.assertEqual(
-            recent_acct_history["timeindex"], self.data_handler.current_datetime
-        )
-        self.assertEqual(recent_acct_history["balance"], self.broker.balance)
-        self.assertEqual(recent_acct_history["equity"], self.broker.equity)
-
-    def test_update_account_fill_event(self):
-        mkt_event = self.event_queue.get(False)
-        self.broker.update_account(mkt_event)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
-        acct_history = [
-            {
-                "timeindex": self.data_handler.current_datetime,
-                "balance": 100_000.0,
-                "equity": 100_000,
-            }
-        ]
-
-        self.assertIn("SYMBOL1", self.broker.get_positions())
-        self.assertEqual(self.broker.get_position("SYMBOL1").units, 100.0)
-        self.assertEqual(self.broker.get_position("SYMBOL1").fill_price, 102.0)
-        self.assertEqual(self.broker.balance, 100_000.0)
-        self.assertEqual(self.broker.equity, 100_000.0)
-        self.assertEqual(self.broker.free_margin, 89_800.0)
-        self.assertEqual(self.broker.account_history, acct_history)
-
-    def test_update_account_pnl(self):
-        mkt_event = self.event_queue.get(False)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
-        self.data_handler.update_bars()
-        mkt_event = self.event_queue.get(False)
-        self.broker.update_account(mkt_event)
-
-        self.assertEqual(self.broker.balance, 100_000.0)
-        self.assertEqual(self.broker.equity, 100_399.5)
-        self.assertEqual(self.broker.free_margin, 90_199.5)
-        self.assertNotEqual(self.broker.account_history, [])
-        recent_acct_history = self.broker.account_history[-1]
-        self.assertEqual(
-            recent_acct_history["timeindex"], self.data_handler.current_datetime
-        )
-        self.assertEqual(recent_acct_history["balance"], self.broker.balance)
-        self.assertEqual(recent_acct_history["equity"], self.broker.equity)
-
-    def test_update_account_position_close(self):
-        _ = self.event_queue.get(False)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
-        self.run_bar_update_workflow()
-        fill_event = self.run_close_workflow()
-        self.broker.update_account(fill_event)
-
-        self.assertNotIn("SYMBOL1", self.broker.get_positions())
-        self.assertEqual("SYMBOL1", self.broker.get_positions_history()[-1].symbol)
-        self.assertEqual(
-            self.broker.get_positions_history()[-1].close_time,
-            self.data_handler.current_datetime,
-        )
-        self.assertEqual(self.broker.balance, 100_399.0)
-        self.assertEqual(self.broker.equity, 100_399.0)
-        self.assertEqual(self.broker.free_margin, 100_399.0)
-        self.assertNotEqual(self.broker.account_history, [])
-        recent_acct_history = self.broker.account_history[-1]
-        self.assertEqual(
-            recent_acct_history["timeindex"], self.data_handler.current_datetime
-        )
-        self.assertEqual(recent_acct_history["balance"], self.broker.balance)
-        self.assertEqual(recent_acct_history["equity"], self.broker.equity)
-
-    def test_check_pending_orders(self):
-        self.broker._exec_price = "next"
-        _ = self.event_queue.get(False)
-        order_event = self.run_buy_workflow(exec_price="next", output_event="order")
-        self.assertEqual(order_event.status, "PENDING")
-        self.assertEqual(order_event.order_type, "MKT")
-
-    def test_get_account_history(self):
-        mkt_event = self.event_queue.get(False)
-        self.broker.update_account(mkt_event)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
-        self.run_bar_update_workflow()
-        fill_event = self.run_close_workflow()
-        self.broker.update_account(fill_event)
-        account_history = self.broker.get_account_history()
-        balance_equity_col = ["balance", "equity"]
-        positions_col = [
-            "symbol",
-            "units",
-            "open_price",
-            "close_price",
-            "commission",
-            "pnl",
-            "open_time",
-            "close_time",
-        ]
-        orders_col = [
-            "timeindex",
-            "type",
-            "symbol",
-            "order_type",
-            "units",
-            "side",
-            "status",
-            "id",
-            "pos_id",
-        ]
-
-        self.assertIn("balance_equity", account_history)
-        self.assertIn("positions", account_history)
-        self.assertIn("orders", account_history)
-        self.assertIsInstance(account_history["balance_equity"], pd.DataFrame)
-        self.assertIsInstance(account_history["balance_equity"].index, pd.DatetimeIndex)
-        self.assertIsInstance(account_history["positions"], pd.DataFrame)
-        self.assertIsInstance(account_history["orders"], pd.DataFrame)
-        self.assertTrue(
-            set(balance_equity_col).issubset(account_history["balance_equity"].columns)
-        )
-        self.assertTrue(
-            set(positions_col).issubset(account_history["positions"].columns)
-        )
-        self.assertTrue(set(orders_col).issubset(account_history["orders"].columns))
 
     def test_close_all_open_positions_exec_current(self):
         mkt_event = self.event_queue.get(False)
@@ -309,6 +180,133 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(closed_position.pnl, 599.0)
         self.assertEqual(closed_position.open_time.strftime("%Y-%m-%d"), "2024-05-03")
         self.assertEqual(closed_position.close_time.strftime("%Y-%m-%d"), "2024-05-04")
+
+    def test_update_account_market_event(self):
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+
+        self.assertDictEqual(self.broker.get_positions(), {})
+        self.assertEqual(self.broker.balance, 100_000.0)
+        self.assertEqual(self.broker.equity, 100_000.0)
+        self.assertEqual(self.broker.free_margin, 100_000.0)
+        recent_acct_history = self.broker.account_history[-1]
+        self.assertEqual(
+            recent_acct_history["timestamp"], self.data_handler.current_datetime
+        )
+        self.assertEqual(recent_acct_history["balance"], self.broker.balance)
+        self.assertEqual(recent_acct_history["equity"], self.broker.equity)
+
+    def test_update_account_fill_event(self):
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+        fill_event = self.run_buy_workflow()
+        self.broker.update_account(fill_event)
+        acct_history = [
+            {
+                "timestamp": self.data_handler.current_datetime,
+                "balance": 100_000.0,
+                "equity": 100_000,
+            }
+        ]
+
+        self.assertIn("SYMBOL1", self.broker.get_positions())
+        self.assertEqual(self.broker.get_position("SYMBOL1").units, 100.0)
+        self.assertEqual(self.broker.get_position("SYMBOL1").fill_price, 102.0)
+        self.assertEqual(self.broker.balance, 100_000.0)
+        self.assertEqual(self.broker.equity, 100_000.0)
+        self.assertEqual(self.broker.free_margin, 89_800.0)
+        self.assertEqual(self.broker.account_history, acct_history)
+
+    def test_update_account_pnl(self):
+        mkt_event = self.event_queue.get(False)
+        fill_event = self.run_buy_workflow()
+        self.broker.update_account(fill_event)
+        self.data_handler.update_bars()
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+
+        self.assertEqual(self.broker.balance, 100_000.0)
+        self.assertEqual(self.broker.equity, 100_399.5)
+        self.assertEqual(self.broker.free_margin, 90_199.5)
+        self.assertNotEqual(self.broker.account_history, [])
+        recent_acct_history = self.broker.account_history[-1]
+        self.assertEqual(
+            recent_acct_history["timestamp"], self.data_handler.current_datetime
+        )
+        self.assertEqual(recent_acct_history["balance"], self.broker.balance)
+        self.assertEqual(recent_acct_history["equity"], self.broker.equity)
+
+    def test_update_account_position_close(self):
+        _ = self.event_queue.get(False)
+        fill_event = self.run_buy_workflow()
+        self.broker.update_account(fill_event)
+        self.run_bar_update_workflow()
+        fill_event = self.run_close_workflow()
+        self.broker.update_account(fill_event)
+
+        self.assertNotIn("SYMBOL1", self.broker.get_positions())
+        self.assertEqual("SYMBOL1", self.broker.get_positions_history()[-1].symbol)
+        self.assertEqual(
+            self.broker.get_positions_history()[-1].close_time,
+            self.data_handler.current_datetime,
+        )
+        self.assertEqual(self.broker.balance, 100_399.0)
+        self.assertEqual(self.broker.equity, 100_399.0)
+        self.assertEqual(self.broker.free_margin, 100_399.0)
+        self.assertNotEqual(self.broker.account_history, [])
+        recent_acct_history = self.broker.account_history[-1]
+        self.assertEqual(
+            recent_acct_history["timestamp"], self.data_handler.current_datetime
+        )
+        self.assertEqual(recent_acct_history["balance"], self.broker.balance)
+        self.assertEqual(recent_acct_history["equity"], self.broker.equity)
+
+    def test_get_account_history(self):
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+        fill_event = self.run_buy_workflow()
+        self.broker.update_account(fill_event)
+        self.run_bar_update_workflow()
+        fill_event = self.run_close_workflow()
+        self.broker.update_account(fill_event)
+        account_history = self.broker.get_account_history()
+        balance_equity_col = ["balance", "equity"]
+        positions_col = [
+            "symbol",
+            "units",
+            "open_price",
+            "close_price",
+            "commission",
+            "pnl",
+            "open_time",
+            "close_time",
+        ]
+        orders_col = [
+            "timestamp",
+            "type",
+            "symbol",
+            "order_type",
+            "units",
+            "side",
+            "status",
+            "order_id",
+            "position_id",
+        ]
+
+        self.assertIn("balance_equity", account_history)
+        self.assertIn("positions", account_history)
+        self.assertIn("orders", account_history)
+        self.assertIsInstance(account_history["balance_equity"], pd.DataFrame)
+        self.assertIsInstance(account_history["balance_equity"].index, pd.DatetimeIndex)
+        self.assertIsInstance(account_history["positions"], pd.DataFrame)
+        self.assertIsInstance(account_history["orders"], pd.DataFrame)
+        self.assertTrue(
+            set(balance_equity_col).issubset(account_history["balance_equity"].columns)
+        )
+        self.assertTrue(
+            set(positions_col).issubset(account_history["positions"].columns)
+        )
+        self.assertTrue(set(orders_col).issubset(account_history["orders"].columns))
 
 
 if __name__ == "__main__":

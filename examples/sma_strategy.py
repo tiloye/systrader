@@ -16,7 +16,7 @@ class SMAStrategy(Strategy):
                 position = self.broker.get_position(s)
                 if position:
                     if signal is not None and position.side != signal:
-                        self.broker.close(s)
+                        self.broker.close(position)
                         if signal == "BUY":
                             self.broker.buy(s)
                         else:

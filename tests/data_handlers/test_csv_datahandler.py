@@ -5,7 +5,7 @@ from queue import Queue
 
 from margin_trader.data_handlers import HistoricCSVDataHandler
 
-CSV_DIR = Path(__file__).parent.joinpath("data")
+CSV_DIR = Path(__file__).parent.parent.joinpath("data")
 
 
 class TestHistoricalCSVDataHandler(unittest.TestCase):

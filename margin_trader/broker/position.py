@@ -241,8 +241,6 @@ class NetPositionManager(PositionManager):
         if position:
             if position.side == event.side:  # New order is in the same direction
                 position.increase_size(event.fill_price, event.units)
-            elif position.side != event.side and event.units > position.units:
-                self.__reverse_position(position, event)
             else:
                 self._close_position(event)
         else:
@@ -263,13 +261,6 @@ class NetPositionManager(PositionManager):
         else:
             self._add_to_history(position, event)
             del self.positions[event.symbol]
-
-    def __reverse_position(self, position: Position, event: FillEvent):
-        close_event = deepcopy(event)
-        close_event.units = position.units
-        event.units = event.units - position.units
-        self._close_position(close_event)
-        self._open_position(event)
 
     def get_position(self, symbol: str) -> Position | None:
         return self.positions.get(symbol)

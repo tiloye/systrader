@@ -13,15 +13,12 @@ class BuyAndHoldStrategy(Strategy):
     as well as a benchmark upon which to compare other strategies.
     """
 
-    def on_market(self, event):
+    def on_market(self):
         """
         For "Buy and Hold" we generate a single signal per symbol
         and then no additional signals. This means we are
         constantly long the market from the date of strategy
         initialisation.
-
-        Parameters
-        event - A MarketEvent object.
         """
 
         for s in self.symbols:

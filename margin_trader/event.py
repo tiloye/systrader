@@ -50,8 +50,8 @@ class OrderEvent(Event):
     order_id: int
         The ID of the order.
     position_id: int
-        The ID of the position an order should operate on. It should only be use when
-        closing positions.
+        The ID of the position an order should operate on. Used to identify orders that
+        closed or modify a position.
 
     Attributes
     ----------
@@ -67,11 +67,14 @@ class OrderEvent(Event):
         'BUY' or 'SELL' for long or short.
     status : str
         The status of the order.
+    request : str
+        The type of request the order fulfilled. Can be "open" (opened a position) or
+        "close" (closed a position).
     order_id : int
         The ID of the order.
     position_id: int
-        The ID of the position an order should operate on. It should only be use when
-        closing positions.
+        The ID of the position an order should operate on. Used to identify orders that
+        closed or modify a position.
     """
 
     def __init__(
@@ -93,6 +96,7 @@ class OrderEvent(Event):
         self.status = "PENDING"
         self.order_id = order_id
         self.position_id = position_id
+        self.request = ""
 
     def execute(self) -> None:
         self.status = "EXECUTED"

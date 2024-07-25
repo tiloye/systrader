@@ -116,49 +116,6 @@ class TestNetPositionManager(unittest.TestCase):
         self.assertEqual(hist_partial_close.units, 50)
         self.assertEqual(hist_partial_close.pnl, 499.0)
 
-    def test_reverse_position_buy_to_sell(self):
-        self.manager.update_position_on_fill(self.event)
-        new_event = FillEvent(
-            timestamp=dt.datetime(2024, 5, 7),
-            symbol=SYMBOL,
-            units=200,
-            side="SELL",
-            fill_price=160.0,
-            commission=0.5,
-            result="open",
-            order_id=2,
-        )
-        self.manager.update_position_on_fill(new_event)
-        position = self.manager.positions[SYMBOL]
-        closed_position = self.manager.history[-1]
-
-        self.assertEqual(position.units, 100)
-        self.assertEqual(position.pnl, 0.0)
-        self.assertEqual(closed_position.units, 100)
-        self.assertEqual(closed_position.pnl, 999.0)
-
-    def test_reverse_position_sell_to_buy(self):
-        self.event.side = "SELL"
-        self.manager.update_position_on_fill(self.event)
-        new_event = FillEvent(
-            timestamp=dt.datetime(2024, 5, 7),
-            symbol=SYMBOL,
-            units=200,
-            side="BUY",
-            fill_price=140.0,
-            commission=0.5,
-            result="open",
-            order_id=2,
-        )
-        self.manager.update_position_on_fill(new_event)
-        position = self.manager.positions[SYMBOL]
-        closed_position = self.manager.history[-1]
-
-        self.assertEqual(position.units, 100)
-        self.assertEqual(position.pnl, 0.0)
-        self.assertEqual(closed_position.units, 100)
-        self.assertEqual(closed_position.pnl, 999.0)
-
     def test_update_position_on_market(self):
         self.manager.update_position_on_fill(self.event)
         self.manager.update_position_on_market()

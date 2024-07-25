@@ -23,29 +23,45 @@ class TestSimBroker(unittest.TestCase):
         self.broker.add_event_queue(self.event_queue)
         self.data_handler.update_bars()  # Add market event to the event queue
 
-    def run_buy_workflow(
-        self, symbol="SYMBOL1", exec_price="current", output_event="fill"
+    def run_buy_sell_workflow(
+        self,
+        symbol="SYMBOL1",
+        side="buy",
+        units=100,
+        exec_price="current",
+        return_events=False,
     ):
         if exec_price == "current":
-            self.broker.buy(symbol)
-            order_event = self.event_queue.get(False)
+            if side == "buy":
+                self.broker.buy(symbol, units=units)
+                order_event = self.event_queue.get(False)
+                fill_event = self.event_queue.get(False)
+            else:
+                self.broker.sell(symbol, units=units)
+                order_event = self.event_queue.get(False)
+                fill_event = self.event_queue.get(False)
         else:
-            self.broker.buy("SYMBOL1")
-            self.broker.check_pending_orders()
-            order_event = self.event_queue.get(False)
-        if output_event == "order":
-            return order_event
-        self.broker.execute_order(order_event)
-        fill_event = self.event_queue.get(False)
-        return fill_event
+            if side == "buy":
+                self.broker.buy(symbol, units=units)
+                self.broker.execute_pending_orders()
+                order_event = self.event_queue.get(False)
+                fill_event = self.event_queue.get(False)
+            else:
+                self.broker.buy(symbol, units=units)
+                self.broker.execute_pending_orders()
+                order_event = self.event_queue.get(False)
+                fill_event = self.event_queue.get(False)
 
-    def run_close_workflow(self, symbol="SYMBOL1"):
+        if return_events:
+            return order_event, fill_event
+
+    def run_close_workflow(self, symbol="SYMBOL1", return_events=None):
         position = self.broker.get_position(symbol)
         self.broker.close(position, position.units)  # type: ignore
         order_event = self.event_queue.get(False)
-        self.broker.execute_order(order_event)
         fill_event = self.event_queue.get(False)
-        return fill_event
+        if return_events:
+            return order_event, fill_event
 
     def run_bar_update_workflow(self):
         self.data_handler.update_bars()
@@ -71,8 +87,7 @@ class TestSimBroker(unittest.TestCase):
 
     def test_get_used_margin_open_positions(self):
         _ = self.event_queue.get(False)
-        fill_event = self.run_buy_workflow()
-        self.broker.p_manager.update_position_on_fill(fill_event)
+        self.run_buy_sell_workflow()
         used_margin = self.broker.get_used_margin()
 
         self.assertEqual(used_margin, 10_200.0)
@@ -85,36 +100,73 @@ class TestSimBroker(unittest.TestCase):
 
     def test_buy(self):
         _ = self.event_queue.get(False)  # Generate signal from market event
-        event = self.run_buy_workflow(output_event="order")
+        order_event, fill_event = self.run_buy_sell_workflow(return_events=True)
 
-        self.assertEqual(event.type, "ORDER")
-        self.assertEqual(event.symbol, "SYMBOL1")
-        self.assertEqual(event.side, "BUY")
-        self.assertEqual(event.units, 100)
-        self.assertEqual(event.order_type, "MKT")
+        self.assertEqual(order_event.symbol, fill_event.symbol)
+        self.assertEqual(order_event.order_id, fill_event.order_id)
+        self.assertEqual(order_event.position_id, fill_event.position_id)
+        self.assertEqual(order_event.side, fill_event.side)
+        self.assertEqual(order_event.units, fill_event.units)
+        self.assertIn(fill_event.symbol, self.broker.get_positions())
 
     def test_sell(self):
         _ = self.event_queue.get(False)
-        symbol = "SYMBOL1"
-        self.broker.sell(symbol)
-        event = self.event_queue.get(False)
+        order_event, fill_event = self.run_buy_sell_workflow(
+            side="sell", return_events=True
+        )
 
-        self.assertEqual(event.type, "ORDER")
-        self.assertEqual(event.symbol, symbol)
-        self.assertEqual(event.side, "SELL")
-        self.assertEqual(event.units, 100)
-        self.assertEqual(event.order_type, "MKT")
+        self.assertEqual(order_event.symbol, fill_event.symbol)
+        self.assertEqual(order_event.order_id, fill_event.order_id)
+        self.assertEqual(order_event.position_id, fill_event.position_id)
+        self.assertEqual(order_event.side, fill_event.side)
+        self.assertEqual(order_event.units, fill_event.units)
+        self.assertIn(fill_event.symbol, self.broker.get_positions())
 
-    def test_check_pending_orders(self):
+    def test_reverse_order_not_rejected(self):
+        # Reset broker balance
+        self.broker.balance = 12000
+        self.broker.equity = 12000
+        self.broker.free_margin = 12000
+
+        # Populate acct balance history
+        mkt_event = self.event_queue.get(False)
+        self.broker.update_account(mkt_event)
+
+        self.run_buy_sell_workflow()  # Price: 102.0, Cost: 10,200
+        with self.subTest("Executed first order"):
+            order = self.broker.order_history[-1]
+            self.assertEqual(order.units, 100)
+            self.assertEqual(order.status, "EXECUTED")
+            self.assertEqual(order.order_id, 1)
+            self.assertEqual(order.position_id, 1)
+
+        self.run_buy_sell_workflow(units=200)
+        with self.subTest("Executed reverse order"):
+            order1 = self.broker.order_history[-2]
+            order2 = self.broker.order_history[-1]
+
+            self.assertEqual(order1.units, 100)
+            self.assertEqual(order1.status, "EXECUTED")
+            self.assertEqual(order1.order_id, 2)
+            self.assertEqual(order1.position_id, 1)
+            self.assertEqual(order2.units, 100)
+            self.assertEqual(order2.status, "EXECUTED")
+            self.assertEqual(order2.order_id, 2)
+            self.assertEqual(order2.position_id, 2)
+
+    def test_execute_pending_orders(self):
         self.broker._exec_price = "next"
         _ = self.event_queue.get(False)
-        order_event = self.run_buy_workflow(exec_price="next", output_event="order")
-        self.assertEqual(order_event.status, "PENDING")
+        order_event, fill_event = self.run_buy_sell_workflow(
+            exec_price="next", return_events=True
+        )
+        self.assertEqual(order_event.status, "EXECUTED")
         self.assertEqual(order_event.order_type, "MKT")
+        self.assertEqual(fill_event.fill_price, 100.0)
 
     def test_execute_order_same_bar_close(self):
         _ = self.event_queue.get(False)
-        fill_event = self.run_buy_workflow()
+        _, fill_event = self.run_buy_sell_workflow(return_events=True)
         order_event = self.broker.order_history[-1]
 
         self.assertEqual(order_event.order_type, "MKT")
@@ -132,8 +184,10 @@ class TestSimBroker(unittest.TestCase):
         execution_price = "next"
         self.broker._exec_price = execution_price
         _ = self.event_queue.get(False)
-        fill_event = self.run_buy_workflow(exec_price=execution_price)
-        self.broker.update_account(fill_event)
+        _, fill_event = self.run_buy_sell_workflow(
+            exec_price=execution_price, return_events=True
+        )
+
         position = self.broker.get_position(fill_event.symbol)
 
         self.assertEqual(position.open_time.strftime("%Y-%m-%d"), "2024-05-03")
@@ -144,15 +198,10 @@ class TestSimBroker(unittest.TestCase):
     def test_close_all_open_positions_exec_current(self):
         mkt_event = self.event_queue.get(False)
         self.broker.update_account(mkt_event)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
+        self.run_buy_sell_workflow()
         self.run_bar_update_workflow()
         self.data_handler.continue_backtest = False
         self.broker.close_all_positions()
-        order_event = self.event_queue.get(False)
-        self.broker.execute_order(order_event)
-        fill_event = self.event_queue.get(False)
-        self.broker.update_account(fill_event)
         closed_position = self.broker.get_positions_history()[-1]
 
         self.assertDictEqual(self.broker.get_positions(), {})
@@ -165,15 +214,10 @@ class TestSimBroker(unittest.TestCase):
         self.broker._exec_price = execution_price
         mkt_event = self.event_queue.get(False)
         self.broker.update_account(mkt_event)
-        fill_event = self.run_buy_workflow(exec_price=execution_price)
-        self.broker.update_account(fill_event)
+        self.run_buy_sell_workflow(exec_price=execution_price)
         self.run_bar_update_workflow()
         self.data_handler.continue_backtest = False
         self.broker.close_all_positions()
-        order_event = self.event_queue.get(False)
-        self.broker.execute_order(order_event)
-        fill_event = self.event_queue.get(False)
-        self.broker.update_account(fill_event)
         closed_position = self.broker.get_positions_history()[-1]
 
         self.assertDictEqual(self.broker.get_positions(), {})
@@ -199,8 +243,7 @@ class TestSimBroker(unittest.TestCase):
     def test_update_account_fill_event(self):
         mkt_event = self.event_queue.get(False)
         self.broker.update_account(mkt_event)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
+        self.run_buy_sell_workflow()
         acct_history = [
             {
                 "timestamp": self.data_handler.current_datetime,
@@ -219,8 +262,7 @@ class TestSimBroker(unittest.TestCase):
 
     def test_update_account_pnl(self):
         mkt_event = self.event_queue.get(False)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
+        self.run_buy_sell_workflow()
         self.data_handler.update_bars()
         mkt_event = self.event_queue.get(False)
         self.broker.update_account(mkt_event)
@@ -238,11 +280,9 @@ class TestSimBroker(unittest.TestCase):
 
     def test_update_account_position_close(self):
         _ = self.event_queue.get(False)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
+        self.run_buy_sell_workflow()
         self.run_bar_update_workflow()
-        fill_event = self.run_close_workflow()
-        self.broker.update_account(fill_event)
+        self.run_close_workflow()
 
         self.assertNotIn("SYMBOL1", self.broker.get_positions())
         self.assertEqual("SYMBOL1", self.broker.get_positions_history()[-1].symbol)
@@ -264,11 +304,10 @@ class TestSimBroker(unittest.TestCase):
     def test_get_account_history(self):
         mkt_event = self.event_queue.get(False)
         self.broker.update_account(mkt_event)
-        fill_event = self.run_buy_workflow()
-        self.broker.update_account(fill_event)
+        self.run_buy_sell_workflow()
         self.run_bar_update_workflow()
-        fill_event = self.run_close_workflow()
-        self.broker.update_account(fill_event)
+        self.run_close_workflow()
+
         account_history = self.broker.get_account_history()
         balance_equity_col = ["balance", "equity"]
         positions_col = [

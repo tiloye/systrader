@@ -1,3 +1,4 @@
+from copy import deepcopy
 from queue import Queue
 
 import pandas as pd
@@ -99,74 +100,6 @@ class SimBroker(Broker):
     def add_event_queue(self, event_queue: Queue[Event]) -> None:
         self.events = event_queue
 
-    def execute_order(self, event: OrderEvent) -> None:
-        """
-        Convert Order objects into Fill objects naively,
-        i.e., without any latency, slippage, or fill ratio problems.
-
-        Parameters
-        ----------
-        event : OrderEvent
-            Contains an Event object with order information.
-
-        Raises
-        ------
-        TypeError
-            If the provided event is not an OrderEvent.
-        """
-        if not isinstance(event, OrderEvent):
-            raise TypeError("Expected an order event object")
-
-        if event.order_type == "MKT":
-            if self._exec_price == "next":
-                price = self.data_handler.get_latest_price(event.symbol, "open")
-            else:
-                price = self.data_handler.get_latest_price(event.symbol)
-
-        if self.__order_req(event) == "open":  # Open new position
-            cost = (event.units * price) / self.leverage
-            if cost < self.free_margin:
-                fill_event = FillEvent(
-                    self.data_handler.current_datetime,
-                    event.symbol,
-                    event.units,
-                    event.side,
-                    price,
-                    self.commission,
-                    order_id=event.order_id,
-                    position_id=event.position_id,
-                )
-                self.events.put(fill_event)
-                event.execute()
-                self.order_history.append(event)
-            else:
-                event.reject()
-                self.order_history.append(event)
-
-        else:  # Close an existing position
-            fill_event = FillEvent(
-                self.data_handler.current_datetime,
-                event.symbol,
-                event.units,
-                event.side,
-                price,
-                self.commission,
-                "close",
-                event.order_id,
-                event.position_id,
-            )
-            self.events.put(fill_event)
-            event.execute()
-            self.order_history.append(event)
-
-    def __order_req(self, order: OrderEvent) -> str:
-        if self.acct_mode == "netting":
-            return "open"
-        else:  # If order was submitted by calling broker.close(position) in hedging mode
-            if order.position_id == order.order_id:
-                return "open"
-            return "close"
-
     def buy(self, symbol: str, order_type: str = "MKT", units: int = 100) -> None:
         """
         Buy x units of symbol.
@@ -235,7 +168,7 @@ class SimBroker(Broker):
             for p in positions:
                 self.close(p)
 
-        positions = self.get_positions().values()
+        positions = list(self.get_positions().values())
         if positions:
             if self.data_handler.continue_backtest:
                 close_all(positions)
@@ -270,6 +203,33 @@ class SimBroker(Broker):
             The position ID of an existing position. If the value is less than the order
             ID, then the order will close or reverse an existing position.
         """
+        if self.acct_mode == "netting":
+            self.__create_net_order(symbol, order_type, side, units, position_id)
+        else:
+            self.__create_hedge_order(symbol, order_type, side, units, position_id)
+        self.__order_id += 1
+
+    def __create_net_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        units: int = 100,
+        position_id: int = 0,
+    ) -> None:
+        def split_order(
+            order: OrderEvent, position: Position
+        ) -> tuple[OrderEvent, OrderEvent]:
+            order1 = deepcopy(order)
+            order1.units = position.units
+            order1.position_id = position.id
+            order1.request = "close"
+
+            order2 = order
+            order2.units = order.units - position.units
+            order2.request = "open"
+            return order1, order2
+
         order = OrderEvent(
             self.data_handler.current_datetime,
             symbol,
@@ -279,28 +239,147 @@ class SimBroker(Broker):
             order_id=self.__order_id,
             position_id=position_id if position_id != 0 else self.__order_id,
         )
-        self.__order_id += 1
 
+        pos = self.get_position(order.symbol)
+        if pos:
+            if order.order_id == order.position_id:  # Call from self.buy/self.sell
+                if order.units > pos.units:  # type: ignore
+                    order1, order2 = split_order(order, pos)  # type: ignore
+                    self.__submit(order1)
+                    self.__submit(order2)
+                elif order.units <= pos.units:
+                    order.position_id = pos.id
+                    order.request = "close"
+                    self.__submit(order)
+            else:  # Call from self.close
+                order.request = "close"
+                self.__submit(order)
+        else:
+            order.request = "open"
+            self.__submit(order)
+
+    def __create_hedge_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        units: int = 100,
+        position_id: int = 0,
+    ) -> None:
+        order = OrderEvent(
+            self.data_handler.current_datetime,
+            symbol,
+            order_type=order_type,
+            units=units,
+            side=side,
+            order_id=self.__order_id,
+            position_id=position_id if position_id != 0 else self.__order_id,
+        )
+
+        if order.order_id == position_id:
+            order.request = "open"
+        else:
+            order.request = "close"
+        self.__submit(order)
+
+    def __submit(self, order: OrderEvent):
         if order.order_type == "MKT":
             if self._exec_price == "current":
-                self.events.put(order)
+                self.execute_order(order)
             elif self._exec_price == "next":
                 order.status = "PENDING"
                 self.pending_orders.put(order)
         else:
             raise NotImplementedError(f"Cannot create {order.order_type} order.")
 
-    def check_pending_orders(self) -> None:
-        """Check if there are pending orders and add them to the event queue."""
+    def execute_order(self, event: OrderEvent) -> None:
+        """
+        Convert Order objects into Fill objects naively,
+        i.e., without any latency, slippage, or fill ratio problems.
+
+        Parameters
+        ----------
+        event : OrderEvent
+            Contains an Event object with order information.
+
+        Raises
+        ------
+        TypeError
+            If the provided event is not an OrderEvent.
+        """
+        if not isinstance(event, OrderEvent):
+            raise TypeError(
+                f"Expected an OrderEvent object. Got {type(event).__name__}"
+            )
+
+        if event.order_type == "MKT":
+            if self._exec_price == "next":
+                price = self.data_handler.get_latest_price(event.symbol, "open")
+            else:
+                price = self.data_handler.get_latest_price(event.symbol)
+
+        if event.request == "open":  # Order request type
+            cost = self.__get_cost(event, price)
+            if cost < self.free_margin:
+                fill_event = FillEvent(
+                    self.data_handler.current_datetime,
+                    event.symbol,
+                    event.units,
+                    event.side,
+                    price,
+                    self.commission,
+                    order_id=event.order_id,
+                    position_id=event.position_id,
+                )
+                self.update_account(fill_event)
+                event.execute()
+
+                self.events.put(event)
+                self.events.put(fill_event)
+                self.order_history.append(event)
+            else:
+                event.reject()
+                self.order_history.append(event)
+
+        else:  # Close an existing position
+            fill_event = FillEvent(
+                self.data_handler.current_datetime,
+                event.symbol,
+                event.units,
+                event.side,
+                price,
+                self.commission,
+                "close",
+                event.order_id,
+                event.position_id,
+            )
+            self.update_account(fill_event)
+            event.execute()
+
+            self.events.put(event)
+            self.events.put(fill_event)
+            self.order_history.append(event)
+
+    def execute_pending_orders(self) -> None:
         if not self.pending_orders.empty():
             n_pending = len(self.pending_orders.queue)
             for i in range(n_pending):
                 order = self.pending_orders.get(False)
                 if order.order_type == "MKT":
-                    self.events.put(order)
+                    self.execute_order(order)
                 elif order.order_type == "LMT":
                     # TODO: Add limit orders to event queue if price has been tagged
                     pass
+
+    def __get_cost(self, event: OrderEvent, price) -> float:
+        if self.acct_mode == "netting":
+            pos = self.get_position(event.symbol)
+            if pos and event.units > pos.units:  # type: ignore[union-attr]
+                net_units = event.units - pos.units  # type: ignore[union-attr]
+                return (net_units * price) / self.leverage
+            return (event.units * price) / self.leverage
+        else:
+            return (event.units * price) / self.leverage
 
     def update_account(self, event: MarketEvent | FillEvent):
         """

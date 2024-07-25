@@ -98,6 +98,16 @@ class TestTraderBacktest(unittest.TestCase):
                 "status": ["EXECUTED"] * 8,
                 "order_id": list(range(1, 9)),
                 "position_id": [1, 1, 3, 3, 5, 5, 7, 7],
+                "request": [
+                    "open",
+                    "close",
+                    "open",
+                    "close",
+                    "open",
+                    "close",
+                    "open",
+                    "close",
+                ],
             }
         )
 

@@ -28,5 +28,17 @@ class Strategy(ABC):
         """
         raise NotImplementedError("Should implement on_market()")
 
+    def on_fill(self, event):
+        """
+        This method is called whenever a fill event occurs.
+        """
+        pass
+
+    def on_order(self, event):
+        """
+        This method is called whenever an order event occurs.
+        """
+        pass
+
     def add_event_queue(self, event_queue):
         self.events = event_queue

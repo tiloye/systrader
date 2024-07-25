@@ -23,13 +23,13 @@ class Trader:
             else:
                 if event is not None:
                     if event.type == "MARKET":
-                        self.broker.check_pending_orders()
+                        self.broker.execute_pending_orders()
                         self.broker.update_account(event)
-                        self.strategy.on_market(event)
+                        self.strategy.on_market()
                     elif event.type == "ORDER":
-                        self.broker.execute_order(event)
+                        self.strategy.on_order(event)
                     elif event.type == "FILL":
-                        self.broker.update_account(event)
+                        self.strategy.on_fill(event)
 
     def _run_backtest(self):
         """Execute the strategy in an event loop."""

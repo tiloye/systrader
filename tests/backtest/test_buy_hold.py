@@ -55,6 +55,7 @@ class TestTraderBacktest(unittest.TestCase):
                 "status": ["EXECUTED"] * 2,
                 "order_id": [1, 2],
                 "position_id": [1, 1],
+                "request": ["open", "close"],
             }
         )
 

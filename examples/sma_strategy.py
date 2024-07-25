@@ -7,7 +7,7 @@ from margin_trader.trader import Trader
 class SMAStrategy(Strategy):
     window = 3
 
-    def on_market(self, event):
+    def on_market(self):
         for s in self.symbols:
             bars = self.data.get_latest_bars(s, N=self.window)
             if bars is not None and len(bars) == self.window:

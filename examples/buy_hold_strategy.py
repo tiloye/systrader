@@ -23,7 +23,7 @@ class BuyAndHoldStrategy(Strategy):
 
         for s in self.symbols:
             if s not in self.broker.get_positions():
-                bars = self.data.get_latest_bars(s, N=1)
+                bars = self.data_handler.get_latest_bars(s, N=1)
                 if bars is not None and bars != []:
                     self.broker.buy(s)
 
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     DATA_DIR = "./data/"
 
     data_handler = HistoricCSVDataHandler(csv_dir=DATA_DIR, symbols=SYMBOLS)
-    sim_broker = SimBroker(data_handler=data_handler, commission=0.0)
-    strategy = BuyAndHoldStrategy(symbols=SYMBOLS, data=data_handler, broker=sim_broker)
+    sim_broker = SimBroker(data_handler=data_handler)
+    strategy = BuyAndHoldStrategy(symbols=SYMBOLS)
     trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
     trader.run()

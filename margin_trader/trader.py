@@ -9,10 +9,14 @@ class Trader:
         self.events = queue.Queue()
         self.data_handler = data_handler
         self.data_handler.add_event_queue(self.events)
+
         self.broker = broker
         self.broker.add_event_queue(self.events)
+
         self.strategy = strategy
         self.strategy.add_event_queue(self.events)
+        self.strategy.add_data_handler(self.data_handler)
+        self.strategy.add_broker(broker)
 
     def _handle_events(self) -> None:
         while True:

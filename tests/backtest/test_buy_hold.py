@@ -17,9 +17,7 @@ class TestTraderBacktest(unittest.TestCase):
         SYMBOLS = ["SYMBOL1"]
         data_handler = HistoricCSVDataHandler(csv_dir=CSV_DIR, symbols=SYMBOLS)
         sim_broker = SimBroker(data_handler=data_handler, commission=0.0)
-        strategy = BuyAndHoldStrategy(
-            symbols=SYMBOLS, data=data_handler, broker=sim_broker
-        )
+        strategy = BuyAndHoldStrategy(symbols=SYMBOLS)
         trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
         trader.run()
 

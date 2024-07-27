@@ -9,7 +9,7 @@ class SMAStrategy(Strategy):
 
     def on_market(self):
         for s in self.symbols:
-            bars = self.data.get_latest_bars(s, N=self.window)
+            bars = self.data_handler.get_latest_bars(s, N=self.window)
             if bars is not None and len(bars) == self.window:
                 close_prices = [bar.close for bar in bars]
                 signal = self._calculate_signal(close_prices)
@@ -46,6 +46,6 @@ if __name__ == "__main__":
 
     data_handler = HistoricCSVDataHandler(csv_dir=DATA_DIR, symbols=SYMBOLS)
     sim_broker = SimBroker(data_handler=data_handler, commission=0.0)
-    strategy = SMAStrategy(symbols=SYMBOLS, data=data_handler, broker=sim_broker)
+    strategy = SMAStrategy(symbols=SYMBOLS)
     trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
     trader.run()

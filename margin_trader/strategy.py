@@ -15,10 +15,8 @@ class Strategy(ABC):
     since it obtains the bar tuples from a queue object.
     """
 
-    def __init__(self, symbols, data, broker):
+    def __init__(self, symbols):
         self.symbols = symbols
-        self.data = data
-        self.broker = broker
 
     @abstractmethod
     def on_market(self):
@@ -42,3 +40,9 @@ class Strategy(ABC):
 
     def add_event_queue(self, event_queue):
         self.events = event_queue
+
+    def add_data_handler(self, data_handler):
+        self.data_handler = data_handler
+
+    def add_broker(self, broker):
+        self.broker = broker

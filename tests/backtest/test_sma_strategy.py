@@ -36,9 +36,7 @@ class TestTraderBacktest(unittest.TestCase):
 
         self.data_handler = HistoricCSVDataHandler(csv_dir=CSV_DIR, symbols=SYMBOLS)
         self.sim_broker = SimBroker(data_handler=self.data_handler, commission=0.0)
-        self.strategy = SMAStrategy(
-            symbols=SYMBOLS, data=self.data_handler, broker=self.sim_broker
-        )
+        self.strategy = SMAStrategy(symbols=SYMBOLS)
         self.trader = Trader(
             data_handler=self.data_handler,
             broker=self.sim_broker,

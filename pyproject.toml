@@ -20,9 +20,6 @@ ruff = "^0.4.8"
 pre-commit = "^3.7.1"
 
 
-[tool.poetry.group.mt5.dependencies]
-mt5linux = {git = "https://github.com/tiloye/mt5linux.git"}
-
 [tool.mypy]
 pretty = true
 python_version = "3.10"

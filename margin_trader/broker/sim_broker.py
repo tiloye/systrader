@@ -363,7 +363,7 @@ class SimBroker(Broker):
     def execute_pending_orders(self) -> None:
         if not self.pending_orders.empty():
             n_pending = len(self.pending_orders.queue)
-            for i in range(n_pending):
+            for _ in range(n_pending):
                 order = self.pending_orders.get(False)
                 if order.order_type == "MKT":
                     self.execute_order(order)
@@ -423,22 +423,21 @@ class SimBroker(Broker):
 
     def __update_fund_values(self, event: MarketEvent | FillEvent) -> None:
         if isinstance(event, MarketEvent):
-            self.__update_equity(event)
+            self.__update_equity()
             self.__update_free_margin()
         elif isinstance(event, FillEvent):
-            self.__update_balance(event)
-            self.__update_equity(event)
+            self.__update_balance()
+            self.__update_equity()
             self.__update_free_margin()
 
-    def __update_balance(self, event: FillEvent) -> None:
+    def __update_balance(self) -> None:
         """Update the account balance based on closed position from a fill event."""
         if len(self.get_positions_history()) > self.__pos_hist_total:
             self.balance += self.p_manager.history[-1].pnl
 
-    def __update_equity(self, event: MarketEvent | FillEvent) -> None:
+    def __update_equity(self) -> None:
         """Update the account equity based on market or fill events."""
-        if event.type == "MARKET" or event.type == "FILL":
-            self.equity = self.balance + self.p_manager.get_total_pnl()
+        self.equity = self.balance + self.p_manager.get_total_pnl()
 
     def __update_free_margin(self) -> None:
         """Update the free margin available for opening positions."""

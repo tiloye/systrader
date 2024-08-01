@@ -160,7 +160,6 @@ def longest_dd_period(returns: pd.Series | np.ndarray) -> int:
         The duration (number of periods) of the longest drawdown period.
     """
     dd_series = emp.stats.drawdown_series(returns)
-    curr_dd = dd_series.iloc[0]
     duration = [0] * len(dd_series)
     for i in range(1, len(dd_series)):
         curr_dd = dd_series.iloc[i]

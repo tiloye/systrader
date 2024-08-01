@@ -41,9 +41,7 @@ class Trader:
         print("Starting backtest")
         while True:
             self.data_handler.update_bars()
-            if self.data_handler.continue_backtest:
-                pass
-            else:
+            if not self.data_handler.continue_backtest:
                 self.broker.close_all_positions()
                 self._handle_events()
                 self.account_history = self.broker.get_account_history()
@@ -52,6 +50,7 @@ class Trader:
         print("Finished running backtest")
 
     def _run_live(self, **kwargs):
+        """Should implement live trading logic."""
         pass
 
     def run(self, **kwargs):

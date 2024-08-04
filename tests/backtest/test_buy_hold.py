@@ -50,6 +50,7 @@ class TestTraderBacktest(unittest.TestCase):
                 "order_type": ["MKT"] * 2,
                 "units": [100] * 2,
                 "side": ["BUY", "SELL"],
+                "price": [None, None],
                 "status": ["EXECUTED"] * 2,
                 "order_id": [1, 2],
                 "position_id": [1, 1],

@@ -93,6 +93,7 @@ class TestTraderBacktest(unittest.TestCase):
                 "order_type": ["MKT"] * 8,
                 "units": [100] * 8,
                 "side": ["SELL", "BUY", "BUY", "SELL", "SELL", "BUY", "BUY", "SELL"],
+                "price": [None] * 8,
                 "status": ["EXECUTED"] * 8,
                 "order_id": list(range(1, 9)),
                 "position_id": [1, 1, 3, 3, 5, 5, 7, 7],

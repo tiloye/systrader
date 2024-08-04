@@ -47,6 +47,8 @@ class OrderEvent(Event):
         Non-negative integer for order quantity.
     side : str
         'BUY' or 'SELL' for long or short.
+    price
+        Execution price of LMT or STP orders.
     order_id: int
         The ID of the order.
     position_id: int
@@ -84,6 +86,7 @@ class OrderEvent(Event):
         order_type: str,
         units: int,
         side: str,
+        price: float | None = None,
         order_id: int = 0,
         position_id: int = 0,
     ) -> None:
@@ -93,6 +96,7 @@ class OrderEvent(Event):
         self.order_type = order_type
         self.units = units
         self.side = side
+        self.price = price
         self.status = "PENDING"
         self.order_id = order_id
         self.position_id = position_id

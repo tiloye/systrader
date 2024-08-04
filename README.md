@@ -16,7 +16,7 @@ Note: This project is a practice project for software development. It may not be
 - **Live Trading Support**: Transition from backtesting to live trading with minimal modifications.
 
 ## Installation
-1. Install [Poetry]("https://python-poetry.org/docs/#installation") (if you haven't already)
+1. Install [Poetry](https://python-poetry.org/docs/#installation) (if you haven't already)
 
 2. Clone the repository:
     ```bash

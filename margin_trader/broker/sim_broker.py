@@ -428,12 +428,12 @@ class SimBroker(Broker):
                     order_id=event.order_id,
                     position_id=event.position_id,
                 )
-                self.update_account(fill_event)
                 event.execute()
+                self.order_history.append(event)
+                self.update_account(fill_event)
 
                 self.events.put(event)
                 self.events.put(fill_event)
-                self.order_history.append(event)
             else:
                 event.reject()
                 self.order_history.append(event)
@@ -450,12 +450,12 @@ class SimBroker(Broker):
                 event.order_id,
                 event.position_id,
             )
-            self.update_account(fill_event)
             event.execute()
+            self.order_history.append(event)
+            self.update_account(fill_event)
 
             self.events.put(event)
             self.events.put(fill_event)
-            self.order_history.append(event)
 
     def execute_pending_orders(self) -> None:
         if not self.pending_orders.empty():
@@ -521,14 +521,15 @@ class SimBroker(Broker):
             self.__update_positions_on_market()
         elif isinstance(event, FillEvent):
             self.__update_positions_on_fill(event)
-            if event.result == "open" and self._exec_price == "next":
-                # Update the PnL of an order executed at the open price.
+            order = self.order_history[-1]
+            if event.result == "open" and order.timestamp < event.timestamp:
+                # Update PnL if a filled position was executed from pending order
                 position = self.get_position(event.symbol)
-                if isinstance(position, list):
+                if isinstance(position, list):  # Hedging account
                     position[-1].update(
                         self.data_handler.get_latest_price(event.symbol)
                     )
-                elif isinstance(position, Position):
+                elif isinstance(position, Position):  # Netting account
                     position.update(self.data_handler.get_latest_price(event.symbol))
 
     def __update_positions_on_fill(self, event: FillEvent) -> None:

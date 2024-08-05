@@ -130,6 +130,10 @@ class SimBroker(Broker):
             assert price is not None, "Must provide price for Limit Order."
             self.__verify_lmt_order(symbol, "BUY", price)
             self.__create_order(symbol, order_type, "BUY", units, price)
+        elif order_type == "STP":
+            assert price is not None, "Must provide price for Stop Order."
+            self.__verify_stp_order(symbol, "BUY", price)
+            self.__create_order(symbol, order_type, "BUY", units, price)
 
     def sell(
         self,
@@ -161,6 +165,10 @@ class SimBroker(Broker):
             assert price is not None, "Must provide price for Limit order."
             self.__verify_lmt_order(symbol, "SELL", price)
             self.__create_order(symbol, order_type, "SELL", units, price)
+        elif order_type == "STP":
+            assert price is not None, "Must provide price for Stop Order."
+            self.__verify_stp_order(symbol, "SELL", price)
+            self.__create_order(symbol, order_type, "SELL", units, price)
 
     def __verify_lmt_order(self, symbol, side: str, price: float) -> None:
         curr_price = self.data_handler.get_latest_price(symbol)
@@ -181,6 +189,23 @@ class SimBroker(Broker):
             elif price < curr_price:
                 raise ValueError(
                     "Limit order price must not be less than current price."
+                )
+
+    def __verify_stp_order(self, symbol, side: str, price: float) -> None:
+        curr_price = self.data_handler.get_latest_price(symbol)
+        if side == "BUY":
+            if price == curr_price:
+                raise ValueError("Stop order price must not be equal to current price.")
+            elif price < curr_price:
+                raise ValueError(
+                    "Stop order price must not be less than current price."
+                )
+        else:
+            if price == curr_price:
+                raise ValueError("Stop order price must not be equal to current price.")
+            elif price > curr_price:
+                raise ValueError(
+                    "Stop order price must not be greater than current price."
                 )
 
     def close(self, position: Position, units: int | None = None) -> None:
@@ -359,7 +384,7 @@ class SimBroker(Broker):
             elif self._exec_price == "next":
                 order.status = "PENDING"
                 self.pending_orders.put(order)
-        elif order.order_type == "LMT":
+        elif order.order_type == "LMT" or order.order_type == "STP":
             self.pending_orders.put(order)
 
     def execute_order(self, event: OrderEvent) -> None:
@@ -387,7 +412,7 @@ class SimBroker(Broker):
                 price = self.data_handler.get_latest_price(event.symbol, "open")
             else:
                 price = self.data_handler.get_latest_price(event.symbol)
-        elif event.order_type == "LMT":
+        elif event.order_type == "LMT" or event.order_type == "STP":
             price = event.price
 
         if event.request == "open":  # Order request type
@@ -439,18 +464,30 @@ class SimBroker(Broker):
                 order = self.pending_orders.get(False)
                 if order.order_type == "MKT":
                     self.execute_order(order)
-                elif order.order_type == "LMT":
+                else:
                     bar = self.data_handler.get_latest_bars(order.symbol)[0]
-                    if order.side == "BUY":
-                        if bar.low < order.price:
-                            self.execute_order(order)
+                    if order.order_type == "LMT":
+                        if order.side == "BUY":
+                            if bar.low < order.price:
+                                self.execute_order(order)
+                            else:
+                                self.events.put(order)
                         else:
-                            self.events.put(order)
-                    else:
-                        if bar.high > order.price:
-                            self.execute_order(order)
+                            if bar.high > order.price:
+                                self.execute_order(order)
+                            else:
+                                self.events.put(order)
+                    elif order.order_type == "STP":
+                        if order.side == "BUY":
+                            if bar.high > order.price:
+                                self.execute_order(order)
+                            else:
+                                self.events.put(order)
                         else:
-                            self.events.put(order)
+                            if bar.low < order.price:
+                                self.execute_order(order)
+                            else:
+                                self.events.put(order)
 
     def __get_cost(self, event: OrderEvent, price) -> float:
         if self.acct_mode == "netting":

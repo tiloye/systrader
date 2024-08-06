@@ -43,11 +43,15 @@ class TestSimBroker(unittest.TestCase):
         else:
             if side == "buy":
                 self.broker.buy(symbol, units=units)
+                self.data_handler.update_bars()
+                _ = self.event_queue.get(False)
                 self.broker.execute_pending_orders()
                 order_event = self.event_queue.get(False)
                 fill_event = self.event_queue.get(False)
             else:
-                self.broker.buy(symbol, units=units)
+                self.broker.sell(symbol, units=units)
+                self.data_handler.update_bars()
+                _ = self.event_queue.get(False)
                 self.broker.execute_pending_orders()
                 order_event = self.event_queue.get(False)
                 fill_event = self.event_queue.get(False)
@@ -98,7 +102,7 @@ class TestSimBroker(unittest.TestCase):
     def test_get_position_history(self):
         self.assertListEqual(self.broker.get_positions_history(), [])
 
-    def test_buy(self):
+    def test_buy_mkt_order_executed(self):
         _ = self.event_queue.get(False)  # Generate signal from market event
         order_event, fill_event = self.run_buy_sell_workflow(return_events=True)
 
@@ -109,7 +113,7 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(order_event.units, fill_event.units)
         self.assertIn(fill_event.symbol, self.broker.get_positions())
 
-    def test_sell(self):
+    def test_sell_mkt_order_executed(self):
         _ = self.event_queue.get(False)
         order_event, fill_event = self.run_buy_sell_workflow(
             side="sell", return_events=True
@@ -121,6 +125,112 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(order_event.side, fill_event.side)
         self.assertEqual(order_event.units, fill_event.units)
         self.assertIn(fill_event.symbol, self.broker.get_positions())
+
+    def test_buy_mkt_order_error(self):
+        _ = self.event_queue.get(False)
+        with self.assertRaises(ValueError):
+            self.broker.buy(SYMBOLS[0], price=101.0)
+
+    def test_sell_mkt_order_error(self):
+        _ = self.event_queue.get(False)
+        with self.assertRaises(ValueError):
+            self.broker.sell(SYMBOLS[0], price=102.0)
+
+    def test_buy_limit_submitted(self):
+        _ = self.event_queue.get(False)
+        self.broker.buy(SYMBOLS[0], order_type="LMT", price=99.0)
+        order = self.broker.pending_orders.get(False)
+
+        self.assertEqual(order.order_type, "LMT")
+        self.assertEqual(order.units, 100)
+        self.assertEqual(order.price, 99.0)
+
+    def test_sell_limit_submitted(self):
+        _ = self.event_queue.get(False)
+        self.broker.sell(SYMBOLS[0], order_type="LMT", price=105.0)
+        order = self.broker.pending_orders.get(False)
+
+        self.assertEqual(order.order_type, "LMT")
+        self.assertEqual(order.units, 100)
+        self.assertEqual(order.price, 105.0)
+
+    def test_buy_limit_error(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("Limit price not provided"):
+            with self.assertRaises(AssertionError):
+                self.broker.buy(SYMBOLS[0], order_type="LMT")
+
+        with self.subTest("Limit price equals current price"):
+            with self.assertRaises(ValueError):
+                self.broker.buy(SYMBOLS[0], order_type="LMT", price=102.0)
+
+        with self.subTest("Limit price greater than current price"):
+            with self.assertRaises(ValueError):
+                self.broker.buy(SYMBOLS[0], order_type="LMT", price=105.0)
+
+    def test_sell_limit_error(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("Limit price not provided"):
+            with self.assertRaises(AssertionError):
+                self.broker.sell(SYMBOLS[0], order_type="LMT")
+
+        with self.subTest("Limit price equals current price"):
+            with self.assertRaises(ValueError):
+                self.broker.sell(SYMBOLS[0], order_type="LMT", price=102.0)
+
+        with self.subTest("Limit price less than current price"):
+            with self.assertRaises(ValueError):
+                self.broker.sell(SYMBOLS[0], order_type="LMT", price=99.0)
+
+    def test_buy_stop_submitted(self):
+        _ = self.event_queue.get(False)
+        self.broker.buy(SYMBOLS[0], order_type="STP", price=104.0)
+        order = self.broker.pending_orders.get(False)
+
+        self.assertEqual(order.order_type, "STP")
+        self.assertEqual(order.units, 100)
+        self.assertEqual(order.price, 104.0)
+
+    def test_sell_stop_submitted(self):
+        _ = self.event_queue.get(False)
+        self.broker.sell(SYMBOLS[0], order_type="STP", price=101.0)
+        order = self.broker.pending_orders.get(False)
+
+        self.assertEqual(order.order_type, "STP")
+        self.assertEqual(order.units, 100)
+        self.assertEqual(order.price, 101.0)
+
+    def test_buy_stop_error(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("Stop price not provided"):
+            with self.assertRaises(AssertionError):
+                self.broker.buy(SYMBOLS[0], order_type="STP")
+
+        with self.subTest("Stop price equals current price"):
+            with self.assertRaises(ValueError):
+                self.broker.buy(SYMBOLS[0], order_type="STP", price=102.0)
+
+        with self.subTest("Stop price less than current price"):
+            with self.assertRaises(ValueError):
+                self.broker.buy(SYMBOLS[0], order_type="STP", price=101.0)
+
+    def test_sell_stop_error(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("Stop price not provided"):
+            with self.assertRaises(AssertionError):
+                self.broker.sell(SYMBOLS[0], order_type="STP")
+
+        with self.subTest("Stop price equals current price"):
+            with self.assertRaises(ValueError):
+                self.broker.sell(SYMBOLS[0], order_type="STP", price=102.0)
+
+        with self.subTest("Stop price greater than current price"):
+            with self.assertRaises(ValueError):
+                self.broker.sell(SYMBOLS[0], order_type="STP", price=105.0)
 
     def test_reverse_order_not_rejected(self):
         # Reset broker balance
@@ -154,15 +264,90 @@ class TestSimBroker(unittest.TestCase):
             self.assertEqual(order2.order_id, 2)
             self.assertEqual(order2.position_id, 2)
 
-    def test_execute_pending_orders(self):
-        self.broker._exec_price = "next"
+    def test_execute_pending_mkt_order(self):
         _ = self.event_queue.get(False)
+        self.broker._exec_price = "next"
         order_event, fill_event = self.run_buy_sell_workflow(
             exec_price="next", return_events=True
         )
+        position = self.broker.get_position(fill_event.symbol)
+
         self.assertEqual(order_event.status, "EXECUTED")
         self.assertEqual(order_event.order_type, "MKT")
-        self.assertEqual(fill_event.fill_price, 100.0)
+        self.assertEqual(fill_event.fill_price, 102.0)
+        self.assertEqual(position.pnl, 400.0 - self.broker.commission)
+
+    def test_execute_pending_buy_lmt_order(self):
+        _ = self.event_queue.get(False)
+        self.broker.buy(SYMBOLS[0], order_type="LMT", price=101.0)
+        self.data_handler.update_bars()
+        _ = self.event_queue.get(False)
+        self.broker.execute_pending_orders()
+        order_event = self.event_queue.get(False)
+        fill_event = self.event_queue.get(False)
+        position = self.broker.get_position(fill_event.symbol)
+
+        self.assertEqual(order_event.status, "EXECUTED")
+        self.assertLess(order_event.timestamp, fill_event.timestamp)
+        self.assertEqual(fill_event.symbol, order_event.symbol)
+        self.assertEqual(fill_event.side, order_event.side)
+        self.assertEqual(fill_event.fill_price, order_event.price)
+        self.assertEqual(fill_event.units, order_event.units)
+        self.assertEqual(position.pnl, 500.0 - self.broker.commission)
+
+    def test_execute_pending_sell_lmt_order(self):
+        _ = self.event_queue.get(False)
+        self.broker.sell(SYMBOLS[0], order_type="LMT", price=105.0)
+        self.data_handler.update_bars()
+        _ = self.event_queue.get(False)
+        self.broker.execute_pending_orders()
+        order_event = self.event_queue.get(False)
+        fill_event = self.event_queue.get(False)
+        position = self.broker.get_position(fill_event.symbol)
+
+        self.assertEqual(order_event.status, "EXECUTED")
+        self.assertLess(order_event.timestamp, fill_event.timestamp)
+        self.assertEqual(fill_event.symbol, order_event.symbol)
+        self.assertEqual(fill_event.side, order_event.side)
+        self.assertEqual(fill_event.fill_price, order_event.price)
+        self.assertEqual(fill_event.units, order_event.units)
+        self.assertEqual(position.pnl, -100.0 - self.broker.commission)
+
+    def test_execute_pending_buy_stp_order(self):
+        _ = self.event_queue.get(False)
+        self.broker.buy(SYMBOLS[0], order_type="STP", price=104.0)
+        self.data_handler.update_bars()
+        _ = self.event_queue.get(False)
+        self.broker.execute_pending_orders()
+        order_event = self.event_queue.get(False)
+        fill_event = self.event_queue.get(False)
+        position = self.broker.get_position(fill_event.symbol)
+
+        self.assertEqual(order_event.status, "EXECUTED")
+        self.assertLess(order_event.timestamp, fill_event.timestamp)
+        self.assertEqual(fill_event.symbol, order_event.symbol)
+        self.assertEqual(fill_event.side, order_event.side)
+        self.assertEqual(fill_event.fill_price, order_event.price)
+        self.assertEqual(fill_event.units, order_event.units)
+        self.assertEqual(position.pnl, 200.0 - self.broker.commission)
+
+    def test_execute_pending_sell_stp_order(self):
+        _ = self.event_queue.get(False)
+        self.broker.sell(SYMBOLS[0], order_type="STP", price=101.0)
+        self.data_handler.update_bars()
+        _ = self.event_queue.get(False)
+        self.broker.execute_pending_orders()
+        order_event = self.event_queue.get(False)
+        fill_event = self.event_queue.get(False)
+        position = self.broker.get_position(fill_event.symbol)
+
+        self.assertEqual(order_event.status, "EXECUTED")
+        self.assertLess(order_event.timestamp, fill_event.timestamp)
+        self.assertEqual(fill_event.symbol, order_event.symbol)
+        self.assertEqual(fill_event.side, order_event.side)
+        self.assertEqual(fill_event.fill_price, order_event.price)
+        self.assertEqual(fill_event.units, order_event.units)
+        self.assertEqual(position.pnl, -500.0 - self.broker.commission)
 
     def test_execute_order_same_bar_close(self):
         _ = self.event_queue.get(False)
@@ -179,21 +364,6 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(fill_event.timestamp.strftime("%Y-%m-%d"), "2024-05-03")
         self.assertEqual(fill_event.fill_price, 102.0)
         self.assertEqual(fill_event.units, 100)
-
-    def test_execute_order_next_bar_open(self):
-        execution_price = "next"
-        self.broker._exec_price = execution_price
-        _ = self.event_queue.get(False)
-        _, fill_event = self.run_buy_sell_workflow(
-            exec_price=execution_price, return_events=True
-        )
-
-        position = self.broker.get_position(fill_event.symbol)
-
-        self.assertEqual(position.open_time.strftime("%Y-%m-%d"), "2024-05-03")
-        self.assertEqual(position.fill_price, 100.0)
-        self.assertEqual(position.last_price, 102.0)
-        self.assertEqual(position.pnl, 200.0 - self.broker.commission)
 
     def test_close_all_open_positions_exec_current(self):
         mkt_event = self.event_queue.get(False)
@@ -222,8 +392,8 @@ class TestSimBroker(unittest.TestCase):
 
         self.assertDictEqual(self.broker.get_positions(), {})
         self.assertEqual(closed_position.pnl, 599.0)
-        self.assertEqual(closed_position.open_time.strftime("%Y-%m-%d"), "2024-05-03")
-        self.assertEqual(closed_position.close_time.strftime("%Y-%m-%d"), "2024-05-04")
+        self.assertEqual(closed_position.open_time.strftime("%Y-%m-%d"), "2024-05-04")
+        self.assertEqual(closed_position.close_time.strftime("%Y-%m-%d"), "2024-05-05")
 
     def test_update_account_market_event(self):
         mkt_event = self.event_queue.get(False)

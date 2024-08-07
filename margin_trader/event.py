@@ -49,6 +49,10 @@ class OrderEvent(Event):
         'BUY' or 'SELL' for long or short.
     price
         Execution price of LMT or STP orders.
+    sl
+        Stop loss price for closing the position.
+    tp
+        Take profit price for closing the position.
     order_id: int
         The ID of the order.
     position_id: int
@@ -67,6 +71,12 @@ class OrderEvent(Event):
         Non-negative integer for order quantity.
     side : str
         'BUY' or 'SELL' for long or short.
+    price : float or None
+        Execution price of LMT or STP orders.
+    sl : float or None
+        Stop loss price for closing the position.
+    tp : float or None
+        Take profit price for closing the position.
     status : str
         The status of the order.
     request : str
@@ -87,6 +97,8 @@ class OrderEvent(Event):
         units: int,
         side: str,
         price: float | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
         order_id: int = 0,
         position_id: int = 0,
     ) -> None:
@@ -97,6 +109,8 @@ class OrderEvent(Event):
         self.units = units
         self.side = side
         self.price = price
+        self.sl = sl
+        self.tp = tp
         self.status = "PENDING"
         self.order_id = order_id
         self.position_id = position_id
@@ -107,6 +121,11 @@ class OrderEvent(Event):
 
     def reject(self) -> None:
         self.status = "REJECTED"
+
+    def is_bracket_order(self):
+        if isinstance(self.sl, float) and isinstance(self.tp, float):
+            return True
+        return False
 
     def print_order(self) -> None:
         """

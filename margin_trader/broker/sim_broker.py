@@ -106,6 +106,8 @@ class SimBroker(Broker):
         order_type: str = "MKT",
         units: int = 100,
         price: float | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
     ) -> None:
         """
         Buy x units of symbol.
@@ -121,19 +123,26 @@ class SimBroker(Broker):
             The number of units to buy, default is 100.
         price
             Execution price of LMT or STP orders.
+        sl
+            Stop loss price for closing the position.
+        tp
+            Take profit price for closing the position.
         """
         if order_type == "MKT":
             if price is not None:
                 raise ValueError("Do not specify price for Market order.")
-            self.__create_order(symbol, order_type, "BUY", units, price)
+            self.__verify_sl_tp_price(symbol, "BUY", price, sl, tp)
+            self.__create_order(symbol, order_type, "BUY", units, price, sl, tp)
         elif order_type == "LMT":
             assert price is not None, "Must provide price for Limit Order."
             self.__verify_lmt_order(symbol, "BUY", price)
-            self.__create_order(symbol, order_type, "BUY", units, price)
+            self.__verify_sl_tp_price(symbol, "BUY", price, sl, tp)
+            self.__create_order(symbol, order_type, "BUY", units, price, sl, tp)
         elif order_type == "STP":
             assert price is not None, "Must provide price for Stop Order."
             self.__verify_stp_order(symbol, "BUY", price)
-            self.__create_order(symbol, order_type, "BUY", units, price)
+            self.__verify_sl_tp_price(symbol, "BUY", price, sl, tp)
+            self.__create_order(symbol, order_type, "BUY", units, price, sl, tp)
 
     def sell(
         self,
@@ -141,6 +150,8 @@ class SimBroker(Broker):
         order_type: str = "MKT",
         units: int = 100,
         price: float | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
     ) -> None:
         """
         Sell x units of symbol.
@@ -156,21 +167,25 @@ class SimBroker(Broker):
             The number of units to sell, default is 100.
         price
             Execution price of LMT or STP orders.
+        sl
+            Stop loss price for closing the position.
+        tp
+            Take profit price for closing the position.
         """
         if order_type == "MKT":
             if price is not None:
                 raise ValueError("Do not specify price for Market order.")
-            self.__create_order(symbol, order_type, "SELL", units, price)
+            self.__create_order(symbol, order_type, "SELL", units, price, sl, tp)
         elif order_type == "LMT":
             assert price is not None, "Must provide price for Limit order."
             self.__verify_lmt_order(symbol, "SELL", price)
-            self.__create_order(symbol, order_type, "SELL", units, price)
+            self.__create_order(symbol, order_type, "SELL", units, price, sl, tp)
         elif order_type == "STP":
             assert price is not None, "Must provide price for Stop Order."
             self.__verify_stp_order(symbol, "SELL", price)
-            self.__create_order(symbol, order_type, "SELL", units, price)
+            self.__create_order(symbol, order_type, "SELL", units, price, sl, tp)
 
-    def __verify_lmt_order(self, symbol, side: str, price: float) -> None:
+    def __verify_lmt_order(self, symbol: str, side: str, price: float) -> None:
         curr_price = self.data_handler.get_latest_price(symbol)
         if side == "BUY":
             if price == curr_price:
@@ -190,6 +205,33 @@ class SimBroker(Broker):
                 raise ValueError(
                     "Limit order price must not be less than current price."
                 )
+
+    def __verify_sl_tp_price(
+        self,
+        symbol: str,
+        side: str,
+        price: float | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
+    ) -> None:
+        if price is None:
+            price = self.data_handler.get_latest_price(symbol)
+
+        if sl:
+            if side == "BUY":
+                if sl >= price:
+                    raise ValueError("Stop loss price must be less than buy price")
+            else:
+                if sl <= price:
+                    raise ValueError("Stop loss price must be greater than sell price")
+
+        if tp:
+            if side == "BUY":
+                if tp <= price:
+                    raise ValueError("Take profit price must be greater than buy price")
+            else:
+                if tp >= price:
+                    raise ValueError("Take profit price must be less than sell price")
 
     def __verify_stp_order(self, symbol, side: str, price: float) -> None:
         curr_price = self.data_handler.get_latest_price(symbol)
@@ -271,6 +313,8 @@ class SimBroker(Broker):
         side: str,
         units: int = 100,
         price: float | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
         position_id: int = 0,
     ) -> None:
         """
@@ -288,15 +332,21 @@ class SimBroker(Broker):
             The number of units, default is 100.
         price
             Execution price of LMT or STP orders.
+        sl
+            Stop loss price for closing the position.
+        tp
+            Take profit price for closing the position.
         position_id
             The position ID of an existing position. If the value is less than the order
             ID, then the order will close or reverse an existing position.
         """
         if self.acct_mode == "netting":
-            self.__create_net_order(symbol, order_type, side, units, price, position_id)
+            self.__create_net_order(
+                symbol, order_type, side, units, price, sl, tp, position_id
+            )
         else:
             self.__create_hedge_order(
-                symbol, order_type, side, units, price, position_id
+                symbol, order_type, side, units, price, sl, tp, position_id
             )
         self.__order_id += 1
 
@@ -307,6 +357,8 @@ class SimBroker(Broker):
         side: str,
         units: int = 100,
         price: float | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
         position_id: int = 0,
     ) -> None:
         def split_order(
@@ -329,6 +381,8 @@ class SimBroker(Broker):
             units=units,
             side=side,
             price=price,
+            sl=sl,
+            tp=tp,
             order_id=self.__order_id,
             position_id=position_id if position_id != 0 else self.__order_id,
         )
@@ -349,7 +403,13 @@ class SimBroker(Broker):
                 self.__submit(order)
         else:
             order.request = "open"
-            self.__submit(order)
+            if order.is_bracket_order():
+                sl_order, tp_order = self.__get_sl_tp_orders(order)
+                self.__submit(order)
+                self.__submit(sl_order)
+                self.__submit(tp_order)
+            else:
+                self.__submit(order)
 
     def __create_hedge_order(
         self,
@@ -358,6 +418,8 @@ class SimBroker(Broker):
         side: str,
         units: int = 100,
         price: float | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
         position_id: int = 0,
     ) -> None:
         order = OrderEvent(
@@ -371,11 +433,70 @@ class SimBroker(Broker):
             position_id=position_id if position_id != 0 else self.__order_id,
         )
 
-        if order.order_id == position_id:
+        if order.order_id == position_id:  # Call from self.buy/self.sell
             order.request = "open"
-        else:
+            if order.is_bracket_order():
+                sl_order, tp_order = self.__get_sl_tp_orders(order)
+                self.__submit(order)
+                self.__submit(sl_order)
+                self.__submit(tp_order)
+            else:
+                self.__submit(order)
+        else:  # Call from self.close
             order.request = "close"
         self.__submit(order)
+
+    def __get_sl_tp_orders(self, order: OrderEvent):
+        if order.side == "BUY":
+            sl_order = OrderEvent(
+                timestamp=order.timestamp,
+                symbol=order.symbol,
+                order_type="STP",
+                units=order.units,
+                side="SELL",
+                price=order.sl,
+                order_id=order.order_id,
+                position_id=order.position_id,
+            )
+            sl_order.request = "close"
+
+            tp_order = OrderEvent(
+                timestamp=order.timestamp,
+                symbol=order.symbol,
+                order_type="LMT",
+                units=order.units,
+                side="SELL",
+                price=order.tp,
+                order_id=order.order_id,
+                position_id=order.position_id,
+            )
+            tp_order.request = "close"
+            return sl_order, tp_order
+        else:
+            sl_order = OrderEvent(
+                timestamp=order.timestamp,
+                symbol=order.symbol,
+                order_type="STP",
+                units=order.units,
+                side="BUY",
+                price=order.sl,
+                order_id=order.order_id,
+                position_id=order.position_id,
+            )
+            sl_order.request = "close"
+
+            tp_order = OrderEvent(
+                timestamp=order.timestamp,
+                symbol=order.symbol,
+                order_type="LMT",
+                units=order.units,
+                side="BUY",
+                price=order.tp,
+                order_id=order.order_id,
+                position_id=order.position_id,
+            )
+            tp_order.request = "close"
+            return sl_order, tp_order
 
     def __submit(self, order: OrderEvent):
         if order.order_type == "MKT":
@@ -468,23 +589,23 @@ class SimBroker(Broker):
                     bar = self.data_handler.get_latest_bars(order.symbol)[0]
                     if order.order_type == "LMT":
                         if order.side == "BUY":
-                            if bar.low < order.price:
+                            if bar.low <= order.price:
                                 self.execute_order(order)
-                            else:
+                            else:  # Add order back to pending order queue
                                 self.events.put(order)
                         else:
-                            if bar.high > order.price:
+                            if bar.high >= order.price:
                                 self.execute_order(order)
                             else:
                                 self.events.put(order)
                     elif order.order_type == "STP":
                         if order.side == "BUY":
-                            if bar.high > order.price:
+                            if bar.high >= order.price:
                                 self.execute_order(order)
                             else:
                                 self.events.put(order)
                         else:
-                            if bar.low < order.price:
+                            if bar.low <= order.price:
                                 self.execute_order(order)
                             else:
                                 self.events.put(order)

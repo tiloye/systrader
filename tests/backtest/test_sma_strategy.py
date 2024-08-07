@@ -94,6 +94,8 @@ class TestTraderBacktest(unittest.TestCase):
                 "units": [100] * 8,
                 "side": ["SELL", "BUY", "BUY", "SELL", "SELL", "BUY", "BUY", "SELL"],
                 "price": [None] * 8,
+                "sl": [None] * 8,
+                "tp": [None] * 8,
                 "status": ["EXECUTED"] * 8,
                 "order_id": list(range(1, 9)),
                 "position_id": [1, 1, 3, 3, 5, 5, 7, 7],

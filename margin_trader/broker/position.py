@@ -226,6 +226,10 @@ class PositionManager:
         total_pnl = sum(pos.pnl for pos in self.positions.values())
         return total_pnl
 
+    def reset(self):
+        self.positions = {}
+        self.history = []
+
 
 class NetPositionManager(PositionManager):
     """

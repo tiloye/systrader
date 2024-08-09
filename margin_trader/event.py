@@ -127,6 +127,14 @@ class OrderEvent(Event):
             return True
         return False
 
+    def is_cover_order(self):
+        if self.sl is not None and self.tp is None:
+            return True
+        elif self.sl is None and self.tp is not None:
+            return True
+        else:
+            return False
+
     def print_order(self) -> None:
         """
         Outputs the values within the Order.

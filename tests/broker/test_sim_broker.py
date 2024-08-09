@@ -6,6 +6,13 @@ import pandas as pd
 
 from margin_trader.broker.sim_broker import NetPositionManager, SimBroker
 from margin_trader.data_handlers import HistoricCSVDataHandler
+from margin_trader.errors import (
+    LimitOrderError,
+    MarketOrderError,
+    StopLossPriceError,
+    StopOrderError,
+    TakeProfitPriceError,
+)
 
 CSV_DIR = Path(__file__).parent.parent.joinpath("data")
 SYMBOLS = ["SYMBOL1"]
@@ -128,13 +135,15 @@ class TestSimBroker(unittest.TestCase):
 
     def test_buy_mkt_order_error(self):
         _ = self.event_queue.get(False)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(MarketOrderError) as e:
             self.broker.buy(SYMBOLS[0], price=101.0)
+        self.assertEqual(str(e.exception), "Market order price should be 'None'.")
 
     def test_sell_mkt_order_error(self):
         _ = self.event_queue.get(False)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(MarketOrderError) as e:
             self.broker.sell(SYMBOLS[0], price=102.0)
+        self.assertEqual(str(e.exception), "Market order price should be 'None'.")
 
     def test_buy_limit_submitted(self):
         _ = self.event_queue.get(False)
@@ -158,31 +167,49 @@ class TestSimBroker(unittest.TestCase):
         _ = self.event_queue.get(False)
 
         with self.subTest("Limit price not provided"):
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(AssertionError) as e:
                 self.broker.buy(SYMBOLS[0], order_type="LMT")
+            self.assertEqual(str(e.exception), "Must provide price for Limit order.")
 
         with self.subTest("Limit price equals current price"):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(LimitOrderError) as e:
                 self.broker.buy(SYMBOLS[0], order_type="LMT", price=102.0)
+            self.assertEqual(
+                str(e.exception),
+                "Buy limit price must be less than current market price.",
+            )
 
         with self.subTest("Limit price greater than current price"):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(LimitOrderError) as e:
                 self.broker.buy(SYMBOLS[0], order_type="LMT", price=105.0)
+            self.assertEqual(
+                str(e.exception),
+                "Buy limit price must be less than current market price.",
+            )
 
     def test_sell_limit_error(self):
         _ = self.event_queue.get(False)
 
         with self.subTest("Limit price not provided"):
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(AssertionError) as e:
                 self.broker.sell(SYMBOLS[0], order_type="LMT")
+            self.assertEqual(str(e.exception), "Must provide price for Limit order.")
 
         with self.subTest("Limit price equals current price"):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(LimitOrderError) as e:
                 self.broker.sell(SYMBOLS[0], order_type="LMT", price=102.0)
+            self.assertEqual(
+                str(e.exception),
+                "Sell limit price must be greater than current market price.",
+            )
 
         with self.subTest("Limit price less than current price"):
             with self.assertRaises(ValueError):
                 self.broker.sell(SYMBOLS[0], order_type="LMT", price=99.0)
+            self.assertEqual(
+                str(e.exception),
+                "Sell limit price must be greater than current market price.",
+            )
 
     def test_buy_stop_submitted(self):
         _ = self.event_queue.get(False)
@@ -206,31 +233,49 @@ class TestSimBroker(unittest.TestCase):
         _ = self.event_queue.get(False)
 
         with self.subTest("Stop price not provided"):
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(AssertionError) as e:
                 self.broker.buy(SYMBOLS[0], order_type="STP")
+            self.assertEqual(str(e.exception), "Must provide price for Stop order.")
 
         with self.subTest("Stop price equals current price"):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(StopOrderError) as e:
                 self.broker.buy(SYMBOLS[0], order_type="STP", price=102.0)
+            self.assertEqual(
+                str(e.exception),
+                "Buy stop price must be greater than current market price.",
+            )
 
         with self.subTest("Stop price less than current price"):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(StopOrderError) as e:
                 self.broker.buy(SYMBOLS[0], order_type="STP", price=101.0)
+            self.assertEqual(
+                str(e.exception),
+                "Buy stop price must be greater than current market price.",
+            )
 
     def test_sell_stop_error(self):
         _ = self.event_queue.get(False)
 
         with self.subTest("Stop price not provided"):
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(AssertionError) as e:
                 self.broker.sell(SYMBOLS[0], order_type="STP")
+            self.assertEqual(str(e.exception), "Must provide price for Stop order.")
 
         with self.subTest("Stop price equals current price"):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(StopOrderError) as e:
                 self.broker.sell(SYMBOLS[0], order_type="STP", price=102.0)
+            self.assertEqual(
+                str(e.exception),
+                "Sell stop price must be less than current market price.",
+            )
 
         with self.subTest("Stop price greater than current price"):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(StopOrderError) as e:
                 self.broker.sell(SYMBOLS[0], order_type="STP", price=105.0)
+            self.assertEqual(
+                str(e.exception),
+                "Sell stop price must be less than current market price.",
+            )
 
     def test_reverse_order_not_rejected(self):
         # Reset broker balance
@@ -511,41 +556,255 @@ class TestSimBroker(unittest.TestCase):
         self.assertEqual(stp_order.order_id, sl_order.order_id)
         self.assertEqual(stp_order.order_id, tp_order.order_id)
 
-    def test_sl_order_error(self):
+    def test_sl_mkt_order_submitted(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("BUY"):
+            self.broker.buy(SYMBOLS[0], sl=100.0)
+            order = self.broker.order_history[-1]
+            position = self.broker.get_position(SYMBOLS[0])
+            sl_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, sl_order.order_id)
+            self.assertEqual(sl_order.price, order.sl)
+            self.assertIsNone(order.tp)
+            self.assertEqual(sl_order.order_type, "STP")
+            self.assertEqual(sl_order.position_id, position.id)
+
+        self.broker.reset()
+        with self.subTest("SELL"):
+            self.broker.sell(SYMBOLS[0], sl=104.0)
+            order = self.broker.order_history[-1]
+            position = self.broker.get_position(SYMBOLS[0])
+            sl_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, sl_order.order_id)
+            self.assertEqual(sl_order.price, order.sl)
+            self.assertIsNone(order.tp)
+            self.assertEqual(sl_order.order_type, "STP")
+            self.assertEqual(sl_order.position_id, position.id)
+
+    def test_sl_lmt_order_submitted(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("BUY"):
+            self.broker.buy(SYMBOLS[0], order_type="LMT", price=101.0, sl=100.0)
+            order = self.broker.pending_orders.get(False)
+            sl_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, sl_order.order_id)
+            self.assertEqual(sl_order.price, order.sl)
+            self.assertIsNone(order.tp)
+            self.assertEqual(sl_order.order_type, "STP")
+
+        self.broker.reset()
+        with self.subTest("SELL"):
+            self.broker.sell(SYMBOLS[0], order_type="LMT", price=104.0, sl=106.0)
+            order = self.broker.pending_orders.get(False)
+            sl_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, sl_order.order_id)
+            self.assertEqual(sl_order.price, order.sl)
+            self.assertIsNone(order.tp)
+            self.assertEqual(sl_order.order_type, "STP")
+
+    def test_sl_stp_order_submitted(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("BUY"):
+            self.broker.buy(SYMBOLS[0], order_type="STP", price=103.0, sl=100.0)
+            order = self.broker.pending_orders.get(False)
+            sl_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, sl_order.order_id)
+            self.assertEqual(sl_order.price, order.sl)
+            self.assertIsNone(order.tp)
+            self.assertEqual(sl_order.order_type, "STP")
+
+        self.broker.reset()
+        with self.subTest("SELL"):
+            self.broker.sell(SYMBOLS[0], order_type="STP", price=101.0, sl=103.0)
+            order = self.broker.pending_orders.get(False)
+            sl_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, sl_order.order_id)
+            self.assertEqual(sl_order.price, order.sl)
+            self.assertIsNone(order.tp)
+            self.assertEqual(sl_order.order_type, "STP")
+
+    def test_tp_mkt_order_submitted(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("BUY"):
+            self.broker.buy(SYMBOLS[0], tp=105.0)
+            order = self.broker.order_history[-1]
+            position = self.broker.get_position(SYMBOLS[0])
+            tp_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, tp_order.order_id)
+            self.assertEqual(tp_order.price, order.tp)
+            self.assertIsNone(order.sl)
+            self.assertEqual(tp_order.order_type, "LMT")
+            self.assertEqual(tp_order.position_id, position.id)
+
+        self.broker.reset()
+        with self.subTest("SELL"):
+            self.broker.sell(SYMBOLS[0], tp=95.0)
+            order = self.broker.order_history[-1]
+            position = self.broker.get_position(SYMBOLS[0])
+            tp_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, tp_order.order_id)
+            self.assertEqual(tp_order.price, order.tp)
+            self.assertIsNone(order.sl)
+            self.assertEqual(tp_order.order_type, "LMT")
+            self.assertEqual(tp_order.position_id, position.id)
+
+    def test_tp_lmt_order_submitted(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("BUY"):
+            self.broker.buy(SYMBOLS[0], order_type="LMT", price=101.0, tp=105.0)
+            order = self.broker.pending_orders.get(False)
+            tp_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, tp_order.order_id)
+            self.assertEqual(tp_order.price, order.tp)
+            self.assertIsNone(order.sl)
+            self.assertEqual(tp_order.order_type, "LMT")
+
+        self.broker.reset()
+        with self.subTest("SELL"):
+            self.broker.sell(SYMBOLS[0], order_type="LMT", price=104.0, tp=100.0)
+            order = self.broker.pending_orders.get(False)
+            tp_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, tp_order.order_id)
+            self.assertEqual(tp_order.price, order.tp)
+            self.assertIsNone(order.sl)
+            self.assertEqual(tp_order.order_type, "LMT")
+
+    def test_tp_stp_order_submitted(self):
+        _ = self.event_queue.get(False)
+
+        with self.subTest("BUY"):
+            self.broker.buy(SYMBOLS[0], order_type="STP", price=103.0, tp=105.0)
+            order = self.broker.pending_orders.get(False)
+            tp_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, tp_order.order_id)
+            self.assertEqual(tp_order.price, order.tp)
+            self.assertIsNone(order.sl)
+            self.assertEqual(tp_order.order_type, "LMT")
+
+        self.broker.reset()
+        with self.subTest("SELL"):
+            self.broker.sell(SYMBOLS[0], order_type="STP", price=101.0, tp=95.0)
+            order = self.broker.pending_orders.get(False)
+            tp_order = self.broker.pending_orders.get(False)
+
+            self.assertEqual(order.order_id, tp_order.order_id)
+            self.assertEqual(tp_order.price, order.tp)
+            self.assertIsNone(order.sl)
+            self.assertEqual(tp_order.order_type, "LMT")
+
+    def test_buy_sl_price_error(self):
         _ = self.event_queue.get(False)
 
         for order_type, price in zip(["MKT", "LMT", "STP"], [None, 101.0, 103.0]):
             with self.subTest(f"{order_type}: sl equals price"):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(StopLossPriceError) as e:
                     self.broker.buy(
                         SYMBOLS[0],
                         order_type=order_type,
                         price=price,
                         sl=102.0 if price is None else price,
                     )
+                self.assertEqual(
+                    str(e.exception), "Stop loss price must be less than buy price."
+                )
 
             with self.subTest(f"{order_type}: sl is greater than price"):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(StopLossPriceError) as e:
                     self.broker.buy(
                         SYMBOLS[0], order_type=order_type, price=price, sl=105.0
                     )
+                self.assertEqual(
+                    str(e.exception), "Stop loss price must be less than buy price."
+                )
 
-    def test_tp_order_error(self):
+    def test__buy_tp_order_error(self):
         _ = self.event_queue.get(False)
 
         for order_type, price in zip(["MKT", "LMT", "STP"], [None, 101.0, 103.0]):
             with self.subTest(f"{order_type}: tp equals price"):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(TakeProfitPriceError) as e:
                     self.broker.buy(
+                        SYMBOLS[0],
+                        order_type=order_type,
+                        price=price,
+                        tp=102.0 if price is None else price,
+                    )
+                self.assertEqual(
+                    str(e.exception),
+                    "Take profit price must be greater than buy price.",
+                )
+
+            with self.subTest(f"{order_type}: tp is less than price"):
+                with self.assertRaises(TakeProfitPriceError) as e:
+                    self.broker.buy(SYMBOLS[0], tp=100.0)
+                self.assertEqual(
+                    str(e.exception),
+                    "Take profit price must be greater than buy price.",
+                )
+
+    def test_sell_sl_order_error(self):
+        _ = self.event_queue.get(False)
+
+        for order_type, price in zip(["MKT", "LMT", "STP"], [None, 103.0, 101.0]):
+            with self.subTest(f"{order_type}: sl equals price"):
+                with self.assertRaises(StopLossPriceError) as e:
+                    self.broker.sell(
                         SYMBOLS[0],
                         order_type=order_type,
                         price=price,
                         sl=102.0 if price is None else price,
                     )
+                self.assertEqual(
+                    str(e.exception), "Stop loss price must be greater than sell price."
+                )
+
+            with self.subTest(f"{order_type}: sl is less than price"):
+                with self.assertRaises(StopLossPriceError) as e:
+                    self.broker.sell(
+                        SYMBOLS[0], order_type=order_type, price=price, sl=100.0
+                    )
+                self.assertEqual(
+                    str(e.exception), "Stop loss price must be greater than sell price."
+                )
+
+    def test__sell_tp_order_error(self):
+        _ = self.event_queue.get(False)
+
+        for order_type, price in zip(["MKT", "LMT", "STP"], [None, 103.0, 101.0]):
+            with self.subTest(f"{order_type}: tp equals price"):
+                with self.assertRaises(TakeProfitPriceError) as e:
+                    self.broker.sell(
+                        SYMBOLS[0],
+                        order_type=order_type,
+                        price=price,
+                        tp=102.0 if price is None else price,
+                    )
+                self.assertEqual(
+                    str(e.exception), "Take profit price must be less than sell price."
+                )
 
             with self.subTest(f"{order_type}: tp is greater than price"):
-                with self.assertRaises(ValueError):
-                    self.broker.buy(SYMBOLS[0], tp=100.0)
+                with self.assertRaises(TakeProfitPriceError) as e:
+                    self.broker.sell(SYMBOLS[0], tp=105.0)
+                self.assertEqual(
+                    str(e.exception), "Take profit price must be less than sell price."
+                )
 
     def test_update_account_market_event(self):
         mkt_event = self.event_queue.get(False)

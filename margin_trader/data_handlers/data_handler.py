@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from margin_trader.event import MarketEvent
+from margin_trader.event import Market
 
 if TYPE_CHECKING:
     from queue import Queue
@@ -227,6 +227,6 @@ class BacktestDataHandler(DataHandler):
                         self.latest_symbol_data[s].append(bar)
                         self.current_datetime = bar.Index
             if self.continue_backtest:
-                self.events.put(MarketEvent())
+                self.events.put(Market())
         else:
             print("The data history has no symbols.")

@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from margin_trader.constants import OrderSide, OrderStatus, OrderType
+
 
 class Event:
     """
@@ -11,7 +13,7 @@ class Event:
     pass
 
 
-class MarketEvent(Event):
+class Market(Event):
     """
     Handles the event of receiving a new market update with
     corresponding bars.
@@ -29,33 +31,33 @@ class MarketEvent(Event):
         self.type = "MARKET"
 
 
-class OrderEvent(Event):
+class Order(Event):
     """
-    Handles the event of sending an Order to an execution system.
-    The order contains a symbol (e.g. GOOG), a type (market or limit),
+    Represents an order event sent to an execution system.
+    The order contains a symbol (e.g. GOOG), a type (market, limit, or stop),
     units and a direction.
 
     Parameters
     ----------
     timestamp:
         The time when the Order was created.
-    symbol : str
+    symbol
         The symbol to trade.
-    order_type : str
-        'MKT' or 'LMT' for Market or Limit orders.
-    units : int
+    order_type : OrderType
+        Type of order (MARKET, LIMIT, STOP).
+    units
         Non-negative integer for order quantity.
-    side : str
+    side
         'BUY' or 'SELL' for long or short.
     price
-        Execution price of LMT or STP orders.
+       Execution price of LIMIT or STOP orders.
     sl
         Stop loss price for closing the position.
     tp
         Take profit price for closing the position.
-    order_id: int
+    order_id
         The ID of the order.
-    position_id: int
+    position_id
         The ID of the position an order should operate on. Used to identify orders that
         closed or modify a position.
 
@@ -65,17 +67,17 @@ class OrderEvent(Event):
         The type of the event, in this case 'ORDER'.
     symbol : str
         The symbol to trade.
-    order_type : str
-        'MKT' or 'LMT' for Market or Limit orders.
+    order_type : OrderType
+        Type of order (MARKET, LIMIT, STOP).
     units : int
         Non-negative integer for order quantity.
-    side : str
-        'BUY' or 'SELL' for long or short.
-    price : float or None
-        Execution price of LMT or STP orders.
-    sl : float or None
+    side : OrderSide
+        BUY or SELL for long or short.
+    price : float | None
+        Execution price of LIMIT or STOP orders.
+    sl : float | None
         Stop loss price for closing the position.
-    tp : float or None
+    tp : float | None
         Take profit price for closing the position.
     status : str
         The status of the order.
@@ -83,7 +85,7 @@ class OrderEvent(Event):
         The type of request the order fulfilled. Can be "open" (opened a position) or
         "close" (closed a position).
     order_id : int
-        The ID of the order.
+        The ID of the order (assigned by broker).
     position_id: int
         The ID of the position an order should operate on. Used to identify orders that
         closed or modify a position.
@@ -91,18 +93,18 @@ class OrderEvent(Event):
 
     def __init__(
         self,
+        *,
         timestamp: datetime,
         symbol: str,
-        order_type: str,
+        order_type: OrderType,
         units: int,
-        side: str,
+        side: OrderSide,
         price: float | None = None,
         sl: float | None = None,
         tp: float | None = None,
         order_id: int = 0,
         position_id: int = 0,
     ) -> None:
-        self.type = "ORDER"
         self.timestamp = timestamp
         self.symbol = symbol
         self.order_type = order_type
@@ -111,16 +113,16 @@ class OrderEvent(Event):
         self.price = price
         self.sl = sl
         self.tp = tp
-        self.status = "PENDING"
+        self.status = OrderStatus.PENDING
         self.order_id = order_id
         self.position_id = position_id
         self.request = ""
 
     def execute(self) -> None:
-        self.status = "EXECUTED"
+        self.status = OrderStatus.EXECUTED
 
     def reject(self) -> None:
-        self.status = "REJECTED"
+        self.status = OrderStatus.REJECTED
 
     def is_bracket_order(self):
         if isinstance(self.sl, float) and isinstance(self.tp, float):
@@ -145,7 +147,7 @@ class OrderEvent(Event):
         )
 
 
-class FillEvent(Event):
+class Fill(Event):
     """
     Encapsulates the notion of a Filled Order, as returned
     from a brokerage.

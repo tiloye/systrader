@@ -7,7 +7,7 @@ from margin_trader.broker.position import (
     NetPositionManager,
     Position,
 )
-from margin_trader.event import FillEvent
+from margin_trader.event import Fill
 
 MOCK_SOURCE = "margin_trader.data_handlers.BackTestDataHanlder"
 SYMBOL = "SYMBOL1"
@@ -19,7 +19,7 @@ class TestNetPositionManager(unittest.TestCase):
         mock_data_handler.get_latest_price.return_value = 160.0
 
         self.manager = NetPositionManager(data_handler=mock_data_handler)
-        self.event = FillEvent(
+        self.event = Fill(
             timestamp=dt.datetime(2024, 5, 6),
             symbol=SYMBOL,
             units=100,
@@ -49,7 +49,7 @@ class TestNetPositionManager(unittest.TestCase):
 
     def test_add_to_existing_position(self):
         self.manager.update_position_on_fill(self.event)
-        new_event = FillEvent(
+        new_event = Fill(
             timestamp=dt.datetime(2024, 5, 7),
             symbol=SYMBOL,
             units=50,
@@ -97,7 +97,7 @@ class TestNetPositionManager(unittest.TestCase):
 
     def test_partial_close(self):
         self.manager.update_position_on_fill(self.event)
-        new_event = FillEvent(
+        new_event = Fill(
             timestamp=dt.datetime(2024, 5, 7),
             symbol=SYMBOL,
             units=50,
@@ -123,7 +123,7 @@ class TestNetPositionManager(unittest.TestCase):
 
     def test_get_total_pnl(self):
         s1_event = self.event
-        s2_event = FillEvent(
+        s2_event = Fill(
             timestamp=dt.datetime(2024, 5, 6),
             symbol="SYMBOL2",
             units=100,
@@ -151,7 +151,7 @@ class TestHedgePositionManager(unittest.TestCase):
         mock_data_handler.get_latest_price.return_value = 160.0
 
         self.manager = HedgePositionManager(data_handler=mock_data_handler)
-        self.event = FillEvent(
+        self.event = Fill(
             timestamp=dt.datetime(2024, 5, 6),
             symbol=SYMBOL,
             units=100,
@@ -180,7 +180,7 @@ class TestHedgePositionManager(unittest.TestCase):
 
     def test_add_new_position_for_same_symbol(self):
         self.manager.update_position_on_fill(self.event)
-        new_event = FillEvent(
+        new_event = Fill(
             timestamp=dt.datetime(2024, 5, 7),
             symbol=SYMBOL,
             units=50,
@@ -198,7 +198,7 @@ class TestHedgePositionManager(unittest.TestCase):
 
     def test_close_position(self):
         self.manager.update_position_on_fill(self.event)
-        new_fill = FillEvent(
+        new_fill = Fill(
             timestamp=dt.datetime(2024, 5, 7),
             symbol=SYMBOL,
             units=self.position.units,

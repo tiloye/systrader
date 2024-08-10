@@ -1,23 +1,17 @@
-from copy import deepcopy
 from queue import Queue
 
 import pandas as pd
 
 from margin_trader.broker.broker import Broker
+from margin_trader.broker.order import OrderManager
 from margin_trader.broker.position import (
     HedgePositionManager,
     NetPositionManager,
     Position,
 )
+from margin_trader.constants import OrderSide, OrderType
 from margin_trader.data_handlers import BacktestDataHandler
-from margin_trader.errors import (
-    LimitOrderError,
-    MarketOrderError,
-    StopLossPriceError,
-    StopOrderError,
-    TakeProfitPriceError,
-)
-from margin_trader.event import Event, FillEvent, MarketEvent, OrderEvent
+from margin_trader.event import Event, Fill, Market, Order
 
 
 class SimBroker(Broker):
@@ -60,18 +54,14 @@ class SimBroker(Broker):
         The leverage ratio used for margin calculations.
     commission : float, optional
         The commission fee charged per trade (if applicable).
-    p_manager : PositionManager
-        A reference to the position manager object.
-    _exec_price : str
-        The price at which orders are executed ("current" or "next").
-    pending_orders : Queue
-        A queue to store pending orders waiting for execution.
     account_history : list[dict]
         A list of dictionaries, with keys  storing historical account data.
         The dictionary has the following keys:
         * timestamp
         * balance
         * equity
+    _exec_price : str
+        The price at which orders are executed ("current" or "next").
     """
 
     def __init__(
@@ -91,18 +81,15 @@ class SimBroker(Broker):
         self.acct_mode = acct_mode
         self.leverage = leverage
         self.commission = commission
-        self.pending_orders = Queue()
         self.account_history = []
-        self.order_history = []
-        self.p_manager: NetPositionManager | HedgePositionManager = (
-            NetPositionManager(self.data_handler)
-            if acct_mode == "netting"
-            else HedgePositionManager(self.data_handler)
-        )
         self._exec_price = exec_price
-        self.__order_id = 1
         self.__stop_out_level = stop_out_level
-        self.__pos_hist_total = len(self.p_manager.history)  # For balance updates
+        self.__order_manager = OrderManager(self)
+        if self.acct_mode == "netting":
+            self._p_manager = NetPositionManager(self.data_handler)
+        else:
+            self._p_manager = HedgePositionManager(self.data_handler)
+        self.__pos_hist_total = len(self._p_manager.history)  # For balance updates
 
     def add_event_queue(self, event_queue: Queue[Event]) -> None:
         self.events = event_queue
@@ -110,7 +97,7 @@ class SimBroker(Broker):
     def buy(
         self,
         symbol: str,
-        order_type: str = "MKT",
+        order_type: OrderType = OrderType.MARKET,
         units: int = 100,
         price: float | None = None,
         sl: float | None = None,
@@ -135,26 +122,21 @@ class SimBroker(Broker):
         tp
             Take profit price for closing the position.
         """
-        if order_type == "MKT":
-            if price is not None:
-                raise MarketOrderError("Market order price should be 'None'.")
-            self.__verify_sl_tp_price(symbol, "BUY", price, sl, tp)
-            self.__create_order(symbol, order_type, "BUY", units, price, sl, tp)
-        elif order_type == "LMT":
-            assert price is not None, "Must provide price for Limit order."
-            self.__verify_lmt_order(symbol, "BUY", price)
-            self.__verify_sl_tp_price(symbol, "BUY", price, sl, tp)
-            self.__create_order(symbol, order_type, "BUY", units, price, sl, tp)
-        elif order_type == "STP":
-            assert price is not None, "Must provide price for Stop order."
-            self.__verify_stp_order(symbol, "BUY", price)
-            self.__verify_sl_tp_price(symbol, "BUY", price, sl, tp)
-            self.__create_order(symbol, order_type, "BUY", units, price, sl, tp)
+        order = self.__order_manager.create_order(
+            symbol=symbol,
+            order_type=order_type,
+            side=OrderSide.BUY,
+            units=units,
+            price=price,
+            sl=sl,
+            tp=tp,
+        )
+        self.__submit(order)
 
     def sell(
         self,
         symbol: str,
-        order_type: str = "MKT",
+        order_type: OrderType = OrderType.MARKET,
         units: int = 100,
         price: float | None = None,
         sl: float | None = None,
@@ -179,82 +161,16 @@ class SimBroker(Broker):
         tp
             Take profit price for closing the position.
         """
-        if order_type == "MKT":
-            if price is not None:
-                raise MarketOrderError("Market order price should be 'None'.")
-            self.__verify_sl_tp_price(symbol, "SELL", price, sl, tp)
-            self.__create_order(symbol, order_type, "SELL", units, price, sl, tp)
-        elif order_type == "LMT":
-            assert price is not None, "Must provide price for Limit order."
-            self.__verify_lmt_order(symbol, "SELL", price)
-            self.__verify_sl_tp_price(symbol, "SELL", price, sl, tp)
-            self.__create_order(symbol, order_type, "SELL", units, price, sl, tp)
-        elif order_type == "STP":
-            assert price is not None, "Must provide price for Stop order."
-            self.__verify_stp_order(symbol, "SELL", price)
-            self.__verify_sl_tp_price(symbol, "SELL", price, sl, tp)
-            self.__create_order(symbol, order_type, "SELL", units, price, sl, tp)
-
-    def __verify_lmt_order(self, symbol: str, side: str, price: float) -> None:
-        curr_price = self.data_handler.get_latest_price(symbol)
-        if side == "BUY":
-            if price >= curr_price:
-                raise LimitOrderError(
-                    "Buy limit price must be less than current market price."
-                )
-        else:
-            if price <= curr_price:
-                raise LimitOrderError(
-                    "Sell limit price must be greater than current market price."
-                )
-
-    def __verify_stp_order(self, symbol, side: str, price: float) -> None:
-        curr_price = self.data_handler.get_latest_price(symbol)
-        if side == "BUY":
-            if price <= curr_price:
-                raise StopOrderError(
-                    "Buy stop price must be greater than current market price."
-                )
-        else:
-            if price >= curr_price:
-                raise StopOrderError(
-                    "Sell stop price must be less than current market price."
-                )
-
-    def __verify_sl_tp_price(
-        self,
-        symbol: str,
-        side: str,
-        price: float | None = None,
-        sl: float | None = None,
-        tp: float | None = None,
-    ) -> None:
-        if price is None:
-            price = self.data_handler.get_latest_price(symbol)
-
-        if sl:
-            if side == "BUY":
-                if sl >= price:
-                    raise StopLossPriceError(
-                        "Stop loss price must be less than buy price."
-                    )
-            else:
-                if sl <= price:
-                    raise StopLossPriceError(
-                        "Stop loss price must be greater than sell price."
-                    )
-
-        if tp:
-            if side == "BUY":
-                if tp <= price:
-                    raise TakeProfitPriceError(
-                        "Take profit price must be greater than buy price."
-                    )
-            else:
-                if tp >= price:
-                    raise TakeProfitPriceError(
-                        "Take profit price must be less than sell price."
-                    )
+        order = self.__order_manager.create_order(
+            symbol=symbol,
+            order_type=order_type,
+            side=OrderSide.SELL,
+            units=units,
+            price=price,
+            sl=sl,
+            tp=tp,
+        )
+        self.__submit(order)
 
     def close(self, position: Position, units: int | None = None) -> None:
         """
@@ -312,259 +228,7 @@ class SimBroker(Broker):
                 )
                 close_all(positions)
 
-    def __create_order(
-        self,
-        symbol: str,
-        order_type: str,
-        side: str,
-        units: int = 100,
-        price: float | None = None,
-        sl: float | None = None,
-        tp: float | None = None,
-        position_id: int = 0,
-    ) -> None:
-        """
-        Create an order event.
-
-        Parameters
-        ----------
-        symbol
-            The symbol for the order.
-        order_type
-            The type of the order.
-        side
-            The side of the order, either "BUY" or "SELL".
-        units
-            The number of units, default is 100.
-        price
-            Execution price of LMT or STP orders.
-        sl
-            Stop loss price for closing the position.
-        tp
-            Take profit price for closing the position.
-        position_id
-            The position ID of an existing position. If the value is less than the order
-            ID, then the order will close or reverse an existing position.
-        """
-        if self.acct_mode == "netting":
-            self.__create_net_order(
-                symbol, order_type, side, units, price, sl, tp, position_id
-            )
-        else:
-            self.__create_hedge_order(
-                symbol, order_type, side, units, price, sl, tp, position_id
-            )
-        self.__order_id += 1
-
-    def __create_net_order(
-        self,
-        symbol: str,
-        order_type: str,
-        side: str,
-        units: int = 100,
-        price: float | None = None,
-        sl: float | None = None,
-        tp: float | None = None,
-        position_id: int = 0,
-    ) -> None:
-        def split_order(
-            order: OrderEvent, position: Position
-        ) -> tuple[OrderEvent, OrderEvent]:
-            order1 = deepcopy(order)
-            order1.units = position.units
-            order1.position_id = position.id
-            order1.request = "close"
-
-            order2 = order
-            order2.units = order.units - position.units
-            order2.request = "open"
-            return order1, order2
-
-        order = OrderEvent(
-            self.data_handler.current_datetime,
-            symbol,
-            order_type=order_type,
-            units=units,
-            side=side,
-            price=price,
-            sl=sl,
-            tp=tp,
-            order_id=self.__order_id,
-            position_id=position_id if position_id != 0 else self.__order_id,
-        )
-
-        pos = self.get_position(order.symbol)
-        if pos:
-            if order.order_id == order.position_id:  # Call from self.buy/self.sell
-                if order.units > pos.units:  # type: ignore
-                    order1, order2 = split_order(order, pos)  # type: ignore
-                    self.__submit(order1)
-                    self.__submit(order2)
-                elif order.units <= pos.units:
-                    order.position_id = pos.id
-                    order.request = "close"
-                    self.__submit(order)
-            else:  # Call from self.close
-                order.request = "close"
-                self.__submit(order)
-        else:
-            order.request = "open"
-            if order.is_bracket_order():
-                sl_order, tp_order = self.__get_bracket_orders(order)
-                self.__submit(order)
-                self.__submit(sl_order)
-                self.__submit(tp_order)
-            elif order.is_cover_order():
-                corder = self.__get_cover_order(order)
-                self.__submit(order)
-                self.__submit(corder)
-            else:
-                self.__submit(order)
-
-    def __create_hedge_order(
-        self,
-        symbol: str,
-        order_type: str,
-        side: str,
-        units: int = 100,
-        price: float | None = None,
-        sl: float | None = None,
-        tp: float | None = None,
-        position_id: int = 0,
-    ) -> None:
-        order = OrderEvent(
-            self.data_handler.current_datetime,
-            symbol,
-            order_type=order_type,
-            units=units,
-            price=price,
-            side=side,
-            order_id=self.__order_id,
-            position_id=position_id if position_id != 0 else self.__order_id,
-        )
-
-        if order.order_id == position_id:  # Call from self.buy/self.sell
-            order.request = "open"
-            if order.is_bracket_order():
-                sl_order, tp_order = self.__get_bracket_orders(order)
-                self.__submit(order)
-                self.__submit(sl_order)
-                self.__submit(tp_order)
-            else:
-                self.__submit(order)
-        else:  # Call from self.close
-            order.request = "close"
-        self.__submit(order)
-
-    def __get_bracket_orders(self, order: OrderEvent):
-        if order.side == "BUY":
-            sl_order = OrderEvent(
-                timestamp=order.timestamp,
-                symbol=order.symbol,
-                order_type="STP",
-                units=order.units,
-                side="SELL",
-                price=order.sl,
-                order_id=order.order_id,
-                position_id=order.position_id,
-            )
-            sl_order.request = "close"
-
-            tp_order = OrderEvent(
-                timestamp=order.timestamp,
-                symbol=order.symbol,
-                order_type="LMT",
-                units=order.units,
-                side="SELL",
-                price=order.tp,
-                order_id=order.order_id,
-                position_id=order.position_id,
-            )
-            tp_order.request = "close"
-            return sl_order, tp_order
-        else:
-            sl_order = OrderEvent(
-                timestamp=order.timestamp,
-                symbol=order.symbol,
-                order_type="STP",
-                units=order.units,
-                side="BUY",
-                price=order.sl,
-                order_id=order.order_id,
-                position_id=order.position_id,
-            )
-            sl_order.request = "close"
-
-            tp_order = OrderEvent(
-                timestamp=order.timestamp,
-                symbol=order.symbol,
-                order_type="LMT",
-                units=order.units,
-                side="BUY",
-                price=order.tp,
-                order_id=order.order_id,
-                position_id=order.position_id,
-            )
-            tp_order.request = "close"
-            return sl_order, tp_order
-
-    def __get_cover_order(self, order: OrderEvent):
-        if order.side == "BUY":
-            if order.sl:
-                corder = OrderEvent(
-                    timestamp=order.timestamp,
-                    symbol=order.symbol,
-                    order_type="STP",
-                    units=order.units,
-                    side="SELL",
-                    price=order.sl,
-                    order_id=order.order_id,
-                    position_id=order.position_id,
-                )
-                corder.request = "close"
-
-            if order.tp:
-                corder = OrderEvent(
-                    timestamp=order.timestamp,
-                    symbol=order.symbol,
-                    order_type="LMT",
-                    units=order.units,
-                    side="SELL",
-                    price=order.tp,
-                    order_id=order.order_id,
-                    position_id=order.position_id,
-                )
-                corder.request = "close"
-            return corder
-        else:
-            if order.sl:
-                corder = OrderEvent(
-                    timestamp=order.timestamp,
-                    symbol=order.symbol,
-                    order_type="STP",
-                    units=order.units,
-                    side="BUY",
-                    price=order.sl,
-                    order_id=order.order_id,
-                    position_id=order.position_id,
-                )
-                corder.request = "close"
-
-            if order.tp:
-                corder = OrderEvent(
-                    timestamp=order.timestamp,
-                    symbol=order.symbol,
-                    order_type="LMT",
-                    units=order.units,
-                    side="BUY",
-                    price=order.tp,
-                    order_id=order.order_id,
-                    position_id=order.position_id,
-                )
-                corder.request = "close"
-            return corder
-
-    def __submit(self, order: OrderEvent):
+    def __submit(self, order: Order):
         if order.order_type == "MKT":
             if self._exec_price == "current":
                 self.execute_order(order)
@@ -573,25 +237,23 @@ class SimBroker(Broker):
         elif order.order_type == "LMT" or order.order_type == "STP":
             self.pending_orders.put(order)
 
-    def execute_order(self, event: OrderEvent) -> None:
+    def execute_order(self, event: Order) -> None:
         """
         Convert Order objects into Fill objects naively,
         i.e., without any latency, slippage, or fill ratio problems.
 
         Parameters
         ----------
-        event : OrderEvent
+        event : Order
             Contains an Event object with order information.
 
         Raises
         ------
         TypeError
-            If the provided event is not an OrderEvent.
+            If the provided event is not an Order.
         """
-        if not isinstance(event, OrderEvent):
-            raise TypeError(
-                f"Expected an OrderEvent object. Got {type(event).__name__}"
-            )
+        if not isinstance(event, Order):
+            raise TypeError(f"Expected an Order object. Got {type(event).__name__}")
 
         if event.order_type == "MKT":
             if self._exec_price == "next":
@@ -604,7 +266,7 @@ class SimBroker(Broker):
         if event.request == "open":  # Order request type
             cost = self.__get_cost(event, price)
             if cost < self.free_margin:
-                fill_event = FillEvent(
+                fill_event = Fill(
                     self.data_handler.current_datetime,
                     event.symbol,
                     event.units,
@@ -625,7 +287,7 @@ class SimBroker(Broker):
                 self.order_history.append(event)
 
         else:  # Close an existing position
-            fill_event = FillEvent(
+            fill_event = Fill(
                 self.data_handler.current_datetime,
                 event.symbol,
                 event.units,
@@ -675,7 +337,7 @@ class SimBroker(Broker):
                             else:
                                 self.events.put(order)
 
-    def __get_cost(self, event: OrderEvent, price) -> float:
+    def __get_cost(self, event: Order, price) -> float:
         if self.acct_mode == "netting":
             pos = self.get_position(event.symbol)
             if pos and event.units > pos.units:  # type: ignore[union-attr]
@@ -685,7 +347,7 @@ class SimBroker(Broker):
         else:
             return (event.units * price) / self.leverage
 
-    def update_account(self, event: MarketEvent | FillEvent):
+    def update_account(self, event: Market | Fill):
         """
         Update the account details based on market or fill events.
 
@@ -701,11 +363,11 @@ class SimBroker(Broker):
         if self.__margin_call():
             self._stop_simulation()
 
-    def __update_positions(self, event: MarketEvent | FillEvent) -> None:
+    def __update_positions(self, event: Market | Fill) -> None:
         """Update positions based on market or fill events."""
-        if isinstance(event, MarketEvent):
+        if isinstance(event, Market):
             self.__update_positions_on_market()
-        elif isinstance(event, FillEvent):
+        elif isinstance(event, Fill):
             self.__update_positions_on_fill(event)
             order = self.order_history[-1]
             if event.result == "open" and order.timestamp < event.timestamp:
@@ -718,7 +380,7 @@ class SimBroker(Broker):
                 elif isinstance(position, Position):  # Netting account
                     position.update(self.data_handler.get_latest_price(event.symbol))
 
-    def __update_positions_on_fill(self, event: FillEvent) -> None:
+    def __update_positions_on_fill(self, event: Fill) -> None:
         """Add new positions to the porfolio"""
         self.p_manager.update_position_on_fill(event)
 
@@ -726,11 +388,11 @@ class SimBroker(Broker):
         """Update portfolio holdings with the latest market price"""
         self.p_manager.update_position_on_market()
 
-    def __update_fund_values(self, event: MarketEvent | FillEvent) -> None:
-        if isinstance(event, MarketEvent):
+    def __update_fund_values(self, event: Market | Fill) -> None:
+        if isinstance(event, Market):
             self.__update_equity()
             self.__update_free_margin()
-        elif isinstance(event, FillEvent):
+        elif isinstance(event, Fill):
             self.__update_balance()
             self.__update_equity()
             self.__update_free_margin()
@@ -748,14 +410,14 @@ class SimBroker(Broker):
         """Update the free margin available for opening positions."""
         self.free_margin = self.equity - self.get_used_margin()
 
-    def __update_account_history(self, event: MarketEvent | FillEvent) -> None:
+    def __update_account_history(self, event: Market | Fill) -> None:
         """Update the account history based on market or fill events."""
         timestamp = self.data_handler.current_datetime
-        if isinstance(event, MarketEvent):
+        if isinstance(event, Market):
             self.account_history.append(
                 {"timestamp": timestamp, "balance": self.balance, "equity": self.equity}
             )
-        elif isinstance(event, FillEvent):
+        elif isinstance(event, Fill):
             if len(self.get_positions_history()) > self.__pos_hist_total:
                 recent_history = self.account_history[-1]
                 if timestamp == recent_history["timestamp"]:

@@ -1,28 +1,34 @@
-class LimitOrderError(ValueError):
+class OrderError(Exception):
+    """Error related to orders."""
+
+    pass
+
+
+class LimitOrderError(OrderError):
     """Error related to limit orders."""
 
     pass
 
 
-class MarketOrderError(ValueError):
+class MarketOrderError(OrderError):
     """Error related to market orders."""
 
     pass
 
 
-class StopOrderError(ValueError):
+class StopOrderError(OrderError):
     """Error related to stop orders."""
 
     pass
 
 
-class StopLossPriceError(ValueError):
+class StopLossPriceError(OrderError):
     """Error related to stop loss price."""
 
     pass
 
 
-class TakeProfitPriceError(ValueError):
+class TakeProfitPriceError(OrderError):
     """Error related to take profit price."""
 
     pass

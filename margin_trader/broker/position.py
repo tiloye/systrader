@@ -2,7 +2,7 @@ from copy import deepcopy
 from datetime import datetime
 
 from margin_trader.data_handlers import BacktestDataHandler
-from margin_trader.event import FillEvent
+from margin_trader.event import Fill
 
 
 class Position:
@@ -181,7 +181,7 @@ class PositionManager:
         for position in self.positions.values():
             position.update(self.data_handler.get_latest_price(position.symbol))
 
-    def update_position_on_fill(self, event: FillEvent) -> None:
+    def update_position_on_fill(self, event: Fill) -> None:
         """
         Add/remove a position based on recently filled order.
 
@@ -195,20 +195,20 @@ class PositionManager:
         else:
             self._close_position(event)
 
-    def _open_position(self, event: FillEvent) -> None:
+    def _open_position(self, event: Fill) -> None:
         raise NotImplementedError("Implement position opening logic in a subclass.")
 
-    def _close_position(self, event: FillEvent) -> None:
+    def _close_position(self, event: Fill) -> None:
         raise NotImplementedError("Implement position closing logic in a subclass.")
 
-    def _close_partial_position(self, position: Position, event: FillEvent) -> None:
+    def _close_partial_position(self, position: Position, event: Fill) -> None:
         partial_position = deepcopy(position)
         partial_position.units = event.units
         position.reduce_size(event.units)
         position.update(event.fill_price)
         self._add_to_history(partial_position, event)
 
-    def _add_to_history(self, position: Position, event: FillEvent) -> None:
+    def _add_to_history(self, position: Position, event: Fill) -> None:
         position.commission += event.commission
         position.update(event.fill_price)
         position.update_close_time(event.timestamp)
@@ -240,7 +240,7 @@ class NetPositionManager(PositionManager):
     def __init__(self, data_handler: BacktestDataHandler) -> None:
         super().__init__(data_handler)
 
-    def _open_position(self, event: FillEvent) -> None:
+    def _open_position(self, event: Fill) -> None:
         position = self.positions.get(event.symbol)
         if position:
             if position.side == event.side:  # New order is in the same direction
@@ -258,7 +258,7 @@ class NetPositionManager(PositionManager):
                 id_=event.order_id,
             )
 
-    def _close_position(self, event: FillEvent) -> None:
+    def _close_position(self, event: Fill) -> None:
         position = self.positions[event.symbol]
         if event.units < position.units:
             self._close_partial_position(position, event)
@@ -280,7 +280,7 @@ class HedgePositionManager(PositionManager):
         super().__init__(data_handler)
         self.position_grp = {}
 
-    def _open_position(self, event: FillEvent) -> None:
+    def _open_position(self, event: Fill) -> None:
         position = Position(
             timestamp=event.timestamp,
             symbol=event.symbol,
@@ -297,7 +297,7 @@ class HedgePositionManager(PositionManager):
         else:
             self.position_grp[position.symbol] = [position.id]
 
-    def _close_position(self, event: FillEvent) -> None:
+    def _close_position(self, event: Fill) -> None:
         position = self.positions[event.position_id]
         if event.units < position.units:
             self._close_partial_position(position, event)

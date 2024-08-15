@@ -18,9 +18,9 @@ class SMAStrategy(Strategy):
                     if signal is not None and position.side != signal:
                         self.broker.close(position)
                         if signal == "BUY":
-                            self.broker.buy(s)
+                            self.broker.buy(symbol=s)
                         else:
-                            self.broker.sell(s)
+                            self.broker.sell(symbol=s)
                 else:
                     if signal is not None:
                         if signal == "BUY":
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     DATA_DIR = "./data/"
 
     data_handler = HistoricCSVDataHandler(csv_dir=DATA_DIR, symbols=SYMBOLS)
-    sim_broker = SimBroker(data_handler=data_handler, commission=0.0)
+    sim_broker = SimBroker()
     strategy = SMAStrategy(symbols=SYMBOLS)
     trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
     trader.run()

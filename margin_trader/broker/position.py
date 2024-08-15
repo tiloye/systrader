@@ -1,8 +1,15 @@
+from __future__ import annotations
+
+from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from margin_trader.data_handlers import BacktestDataHandler
-from margin_trader.event import Fill
+from margin_trader.broker.order import OrderSide
+
+if TYPE_CHECKING:
+    from margin_trader.broker.fill import Fill
+    from margin_trader.broker.sim_broker import SimBroker
 
 
 class Position:
@@ -21,7 +28,7 @@ class Position:
         The price at which the position was filled.
     commission : float or None
         The commission for the trade.
-    side : str
+    side : OrderSide
         The side of the position, either "BUY" or "SELL".
     id_ : int
         The ID of the position. Equal to the ID of the order that initiated
@@ -56,7 +63,7 @@ class Position:
         units: int,
         fill_price: float,
         commission: float,
-        side: str,
+        side: OrderSide,
         id_: int,
     ):
         self.symbol = symbol
@@ -72,7 +79,7 @@ class Position:
     def update_pnl(self) -> None:
         """Update the PnL of the position."""
         pnl = (self.last_price - self.fill_price) * self.units
-        if self.side == "BUY":
+        if self.side == OrderSide.BUY:
             self.pnl = pnl - self.commission
         else:
             self.pnl = -1 * pnl - self.commission
@@ -162,8 +169,8 @@ class PositionManager:
         A list of closed positions.
     """
 
-    def __init__(self, data_handler: BacktestDataHandler) -> None:
-        self.data_handler = data_handler
+    def __init__(self, broker: SimBroker) -> None:
+        self.broker = broker
         self.positions: dict[str | int, Position] = {}
         self.history: list[Position] = []
 
@@ -179,7 +186,7 @@ class PositionManager:
             The latest market price.
         """
         for position in self.positions.values():
-            position.update(self.data_handler.get_latest_price(position.symbol))
+            position.update(self.broker.data_handler.get_latest_price(position.symbol))
 
     def update_position_on_fill(self, event: Fill) -> None:
         """
@@ -237,9 +244,6 @@ class NetPositionManager(PositionManager):
     pairs of symbol name and Position object.
     """
 
-    def __init__(self, data_handler: BacktestDataHandler) -> None:
-        super().__init__(data_handler)
-
     def _open_position(self, event: Fill) -> None:
         position = self.positions.get(event.symbol)
         if position:
@@ -276,9 +280,9 @@ class HedgePositionManager(PositionManager):
     pairs of position ID and the Position object
     """
 
-    def __init__(self, data_handler: BacktestDataHandler) -> None:
-        super().__init__(data_handler)
-        self.position_grp = {}
+    def __init__(self, broker: SimBroker) -> None:
+        super().__init__(broker)
+        self.position_grp = defaultdict(list)
 
     def _open_position(self, event: Fill) -> None:
         position = Position(
@@ -291,11 +295,7 @@ class HedgePositionManager(PositionManager):
             id_=event.order_id,
         )
         self.positions[position.id] = position
-        symbol_pos = self.position_grp.get(event.symbol, False)
-        if symbol_pos:
-            symbol_pos.append(position.id)
-        else:
-            self.position_grp[position.symbol] = [position.id]
+        self.position_grp[position.symbol].append(position.id)
 
     def _close_position(self, event: Fill) -> None:
         position = self.positions[event.position_id]

@@ -4,10 +4,10 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from margin_trader.event import Market
+from margin_trader.event import MARKETEVENT
 
 if TYPE_CHECKING:
-    from queue import Queue
+    from margin_trader.event import EventManager
 
 
 class DataHandler(ABC):
@@ -155,8 +155,8 @@ class BacktestDataHandler(DataHandler):
 
         self._prepare_data()
 
-    def add_event_queue(self, event_queue: Queue):
-        self.events = event_queue
+    def add_event_manager(self, event_manager: EventManager):
+        self.event_manager = event_manager
 
     def _prepare_data(self):
         """Prepare dataset for backtest"""
@@ -227,6 +227,6 @@ class BacktestDataHandler(DataHandler):
                         self.latest_symbol_data[s].append(bar)
                         self.current_datetime = bar.Index
             if self.continue_backtest:
-                self.events.put(Market())
+                self.event_manager.notify(MARKETEVENT)
         else:
             print("The data history has no symbols.")

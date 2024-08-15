@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 
+from margin_trader.event import EventListener
 
-class Strategy(ABC):
+
+class Strategy(ABC, EventListener):
     """
     Strategy is an abstract base class providing an interface for
     all subsequent (inherited) strategy handling objects.
@@ -38,11 +40,16 @@ class Strategy(ABC):
         """
         pass
 
-    def add_event_queue(self, event_queue):
-        self.events = event_queue
-
     def add_data_handler(self, data_handler):
         self.data_handler = data_handler
 
     def add_broker(self, broker):
         self.broker = broker
+
+    def update(self, event=None):
+        if event is None:
+            self.on_market()
+        elif type(event).__name__ == "Order":
+            self.on_order(event)
+        else:
+            self.on_fill(event)

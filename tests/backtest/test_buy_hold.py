@@ -16,7 +16,7 @@ class TestTraderBacktest(unittest.TestCase):
         CSV_DIR = Path(__file__).parent.parent.joinpath("data")
         SYMBOLS = ["SYMBOL1"]
         data_handler = HistoricCSVDataHandler(csv_dir=CSV_DIR, symbols=SYMBOLS)
-        sim_broker = SimBroker(data_handler=data_handler, commission=0.0)
+        sim_broker = SimBroker()
         strategy = BuyAndHoldStrategy(symbols=SYMBOLS)
         trader = Trader(data_handler=data_handler, broker=sim_broker, strategy=strategy)
         trader.run()
@@ -27,7 +27,7 @@ class TestTraderBacktest(unittest.TestCase):
         expected_pos_history = pd.DataFrame(
             data={
                 "symbol": "SYMBOL1",
-                "side": "BUY",
+                "side": "buy",
                 "units": 100,
                 "open_price": 102.0,
                 "close_price": 112.0,
@@ -41,19 +41,18 @@ class TestTraderBacktest(unittest.TestCase):
         )
         expected_order_history = pd.DataFrame(
             data={
-                "type": ["ORDER"] * 2,
                 "timestamp": [
                     pd.to_datetime("2024-05-03"),
                     pd.to_datetime("2024-05-07"),
                 ],
                 "symbol": ["SYMBOL1"] * 2,
-                "order_type": ["MKT"] * 2,
+                "order_type": ["mkt"] * 2,
                 "units": [100] * 2,
-                "side": ["BUY", "SELL"],
+                "side": ["buy", "sell"],
                 "price": [None, None],
                 "sl": [None, None],
                 "tp": [None, None],
-                "status": ["EXECUTED"] * 2,
+                "status": ["executed"] * 2,
                 "order_id": [1, 2],
                 "position_id": [1, 1],
                 "request": ["open", "close"],

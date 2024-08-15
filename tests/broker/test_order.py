@@ -1,16 +1,19 @@
 # mypy: disable-error-code=union-attr
 import datetime as dt
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from unittest.mock import Mock
 
 from margin_trader.broker.order import (
     BracketOrder,
     CoverOrder,
+    Order,
     OrderManager,
     ReverseOrder,
 )
 from margin_trader.broker.position import Position
-from margin_trader.constants import OrderSide, OrderType
+from margin_trader.constants import OrderSide, OrderStatus, OrderType
 from margin_trader.errors import (
     LimitOrderError,
     OrderError,
@@ -18,10 +21,87 @@ from margin_trader.errors import (
     StopOrderError,
     TakeProfitPriceError,
 )
-from margin_trader.event import Order
 
 SYMBOL = "GOOG"
 TIMESTAMP = dt.datetime(2023, 1, 1, 12, 0, 0)
+
+
+class TestOrder(unittest.TestCase):
+    def test_execute_buy(self):
+        for order_type, price in zip(
+            [OrderType.MARKET, OrderType.LIMIT, OrderType.STOP], [None, 100.0, 105.0]
+        ):
+            with self.subTest(order_type=order_type, price=price):
+                order = Order(
+                    timestamp=dt.datetime(2023, 1, 1, 12, 0, 0),
+                    symbol=SYMBOL,
+                    order_type=order_type,
+                    units=100,
+                    side=OrderSide.BUY,
+                    price=price,
+                )
+                order.execute()
+                self.assertEqual(order.status, OrderStatus.EXECUTED)
+
+    def test_execute_sell(self):
+        for order_type, price in zip(
+            [OrderType.MARKET, OrderType.LIMIT, OrderType.STOP], [None, 105.0, 100.0]
+        ):
+            with self.subTest(order_type=order_type, price=price):
+                order = Order(
+                    timestamp=dt.datetime(2023, 1, 1, 12, 0, 0),
+                    symbol=SYMBOL,
+                    order_type=order_type,
+                    units=100,
+                    side=OrderSide.SELL,
+                    price=price,
+                )
+                order.execute()
+                self.assertEqual(order.status, OrderStatus.EXECUTED)
+
+    def test_reject_buy(self):
+        for order_type, price in zip(OrderType, [None, 100.0, 105.0]):
+            with self.subTest(order_type=order_type, price=price):
+                order = Order(
+                    timestamp=dt.datetime(2023, 1, 1, 12, 0, 0),
+                    symbol=SYMBOL,
+                    order_type=order_type,
+                    units=100,
+                    side=OrderSide.BUY,
+                    price=price,
+                )
+                order.reject()
+                self.assertEqual(order.status, OrderStatus.REJECTED)
+
+    def test_reject_sell(self):
+        for order_type, price in zip(OrderType, [None, 105.0, 100.0]):
+            with self.subTest(order_type=order_type, price=price):
+                order = Order(
+                    timestamp=dt.datetime(2023, 1, 1, 12, 0, 0),
+                    symbol=SYMBOL,
+                    order_type=order_type,
+                    units=100,
+                    side=OrderSide.SELL,
+                    price=price,
+                )
+                order.reject()
+                self.assertEqual(order.status, OrderStatus.REJECTED)
+
+    def test_print_order(self):
+        order = Order(
+            timestamp=dt.datetime(2023, 1, 1, 12, 0, 0),
+            symbol=SYMBOL,
+            order_type=OrderType.MARKET,
+            units=100,
+            side=OrderSide.BUY,
+        )
+        expected_output = (
+            f"Order: Symbol={SYMBOL}, Type=mkt, units=100, Direction=buy\n"
+        )
+        with StringIO() as out, redirect_stdout(out):
+            order.print_order()
+            output = out.getvalue()
+            self.assertEqual(expected_output, output)
 
 
 class TestMarketOrderCreation(unittest.TestCase):
@@ -312,7 +392,7 @@ class TestMarketOrderCreation(unittest.TestCase):
             for side, reverse_side in OrderSide, [OrderSide.SELL, OrderSide.BUY]:
                 for units, reverse_units in [100, 200], [100, 150]:
                     with self.subTest(
-                        f"{broker_exec_price}_{side}",  # type: ignore[has-type]
+                        f"{broker_exec_price}_{side}",
                         reverse_side=reverse_side.value,
                         units=units,
                         reverse_units=reverse_units,

@@ -99,7 +99,7 @@ class TestPerformanceUtils(unittest.TestCase):
                 "open_price": [10, 20],
                 "close_price": [11.0, 19.5],
                 "commission": [0.0, 0.0],
-                "side": ["BUY", "BUY"],
+                "side": ["buy", "buy"],
                 "open_time": [dates[0], dates[2]],
                 "close_time": [dates[2], dates[4]],
                 "pnl": [10.0, -5.0],
@@ -112,37 +112,29 @@ class TestPerformanceUtils(unittest.TestCase):
         balance_history = self.bl_eq_history["balance"]
         expected = pd.Series([0.01, -0.0050])
         rets = putils.get_trade_roi(trade_history, balance_history).round(4)
-        try:
-            pd.testing.assert_series_equal(rets, expected)
-        except Exception as e:
-            raise AssertionError(e)
-        else:
-            self.assertTrue(True)
+
+        pd.testing.assert_series_equal(rets, expected)
 
     def test_get_pyfolio_roundtrips(self):
         account_history = {
             "balance_equity": self.bl_eq_history,
             "positions": self.trade_history,
         }
-        expected_cols = [
-            "pnl",
-            "open_dt",
-            "close_dt",
-            "long",
-            "symbol",
-            "duration",
-            "returns",
-        ]
+
+        expected_dataframe = pd.DataFrame(
+            data={
+                "pnl": [10.0, -5.0],
+                "open_dt": [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-03")],
+                "close_dt": [pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-05")],
+                "long": [True, True],
+                "symbol": ["A", "B"],
+                "duration": [pd.Timedelta(days=2), pd.Timedelta(days=2)],
+                "returns": [0.01, -0.005],
+            }
+        )
         pyfolio_rts = putils.get_pyfolio_roundtrips(account_history)
 
-        self.assertListEqual(expected_cols, pyfolio_rts.columns.tolist())
-        self.assertTrue(pyfolio_rts["pnl"].apply(type).eq(float).all())
-        self.assertTrue(pyfolio_rts["open_dt"].apply(type).eq(pd.Timestamp).all())
-        self.assertTrue(pyfolio_rts["close_dt"].apply(type).eq(pd.Timestamp).all())
-        self.assertTrue(pyfolio_rts["long"].apply(type).eq(bool).all())
-        self.assertTrue(pyfolio_rts["symbol"].apply(type).eq(str).all())
-        self.assertTrue(pyfolio_rts["duration"].apply(type).eq(pd.Timedelta).all())
-        self.assertTrue(pyfolio_rts["returns"].apply(type).eq(float).all())
+        pd.testing.assert_frame_equal(pyfolio_rts, expected_dataframe, rtol=1e-2)
 
 
 if __name__ == "__main__":

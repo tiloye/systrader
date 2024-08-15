@@ -35,7 +35,7 @@ class TestTraderBacktest(unittest.TestCase):
                 writer.writerow(day)
 
         self.data_handler = HistoricCSVDataHandler(csv_dir=CSV_DIR, symbols=SYMBOLS)
-        self.sim_broker = SimBroker(data_handler=self.data_handler, commission=0.0)
+        self.sim_broker = SimBroker()
         self.strategy = SMAStrategy(symbols=SYMBOLS)
         self.trader = Trader(
             data_handler=self.data_handler,
@@ -55,7 +55,7 @@ class TestTraderBacktest(unittest.TestCase):
         expected_pos_history = pd.DataFrame(
             data={
                 "symbol": ["SMA_SYMBOL1"] * 4,
-                "side": ["SELL", "BUY", "SELL", "BUY"],
+                "side": ["sell", "buy", "sell", "buy"],
                 "units": [100] * 4,
                 "open_price": [104.0, 109.0, 105.0, 107.0],
                 "close_price": [109.0, 105.0, 107.0, 108.0],
@@ -78,7 +78,6 @@ class TestTraderBacktest(unittest.TestCase):
         )
         expected_order_history = pd.DataFrame(
             data={
-                "type": ["ORDER"] * 8,
                 "timestamp": [
                     pd.to_datetime("2024-05-04"),
                     pd.to_datetime("2024-05-06"),
@@ -90,13 +89,13 @@ class TestTraderBacktest(unittest.TestCase):
                     pd.to_datetime("2024-05-10"),
                 ],
                 "symbol": ["SMA_SYMBOL1"] * 8,
-                "order_type": ["MKT"] * 8,
+                "order_type": ["mkt"] * 8,
                 "units": [100] * 8,
-                "side": ["SELL", "BUY", "BUY", "SELL", "SELL", "BUY", "BUY", "SELL"],
+                "side": ["sell", "buy", "buy", "sell", "sell", "buy", "buy", "sell"],
                 "price": [None] * 8,
                 "sl": [None] * 8,
                 "tp": [None] * 8,
-                "status": ["EXECUTED"] * 8,
+                "status": ["executed"] * 8,
                 "order_id": list(range(1, 9)),
                 "position_id": [1, 1, 3, 3, 5, 5, 7, 7],
                 "request": [

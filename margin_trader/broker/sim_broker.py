@@ -1,9 +1,12 @@
-from queue import Queue
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from margin_trader.broker.broker import Broker
-from margin_trader.broker.order import OrderManager
+from margin_trader.broker.fill import Fill
+from margin_trader.broker.order import Order, OrderManager, ReverseOrder
 from margin_trader.broker.position import (
     HedgePositionManager,
     NetPositionManager,
@@ -11,10 +14,13 @@ from margin_trader.broker.position import (
 )
 from margin_trader.constants import OrderSide, OrderType
 from margin_trader.data_handlers import BacktestDataHandler
-from margin_trader.event import Event, Fill, Market, Order
+from margin_trader.event import FILLEVENT, ORDEREVENT, EventListener
+
+if TYPE_CHECKING:
+    from margin_trader.event import EventManager
 
 
-class SimBroker(Broker):
+class SimBroker(Broker, EventListener):
     """Simulate live trading on a broker account.
 
     This class simplifies trading by automatically converting order objects to fill
@@ -23,8 +29,6 @@ class SimBroker(Broker):
 
     Parameters
     ----------
-    data_handler : DataHandler
-        The data handler providing market data.
     balance : int or float, optional
         The initial balance of the account. Default is 100_000.
     acct_mode: str
@@ -48,8 +52,6 @@ class SimBroker(Broker):
         The total current account value (balance + unrealized profit/loss).
     free_margin : float
         The available margin for new positions.
-    data_handler : DataHandler
-        A reference to the data handler object.
     leverage : int
         The leverage ratio used for margin calculations.
     commission : float, optional
@@ -66,7 +68,6 @@ class SimBroker(Broker):
 
     def __init__(
         self,
-        data_handler: BacktestDataHandler,
         balance: int | float = 100_000,
         acct_mode: str = "netting",
         leverage: int = 1,
@@ -77,25 +78,28 @@ class SimBroker(Broker):
         self.balance = balance
         self.equity = balance
         self.free_margin = balance
-        self.data_handler = data_handler
         self.acct_mode = acct_mode
         self.leverage = leverage
         self.commission = commission
         self.account_history = []
         self._exec_price = exec_price
-        self.__stop_out_level = stop_out_level
-        self.__order_manager = OrderManager(self)
+        self._stop_out_level = stop_out_level
+        self._order_manager = OrderManager(self)
         if self.acct_mode == "netting":
-            self._p_manager = NetPositionManager(self.data_handler)
+            self._p_manager = NetPositionManager(self)
         else:
-            self._p_manager = HedgePositionManager(self.data_handler)
+            self._p_manager = HedgePositionManager(self)  # type: ignore[assignment]
         self.__pos_hist_total = len(self._p_manager.history)  # For balance updates
 
-    def add_event_queue(self, event_queue: Queue[Event]) -> None:
-        self.events = event_queue
+    def add_event_manager(self, event_manager: EventManager) -> None:
+        self.event_manager = event_manager
+
+    def add_data_handler(self, data_handler: BacktestDataHandler) -> None:
+        self.data_handler = data_handler
 
     def buy(
         self,
+        *,
         symbol: str,
         order_type: OrderType = OrderType.MARKET,
         units: int = 100,
@@ -122,7 +126,7 @@ class SimBroker(Broker):
         tp
             Take profit price for closing the position.
         """
-        order = self.__order_manager.create_order(
+        order = self._order_manager.create_order(
             symbol=symbol,
             order_type=order_type,
             side=OrderSide.BUY,
@@ -161,7 +165,7 @@ class SimBroker(Broker):
         tp
             Take profit price for closing the position.
         """
-        order = self.__order_manager.create_order(
+        order = self._order_manager.create_order(
             symbol=symbol,
             order_type=order_type,
             side=OrderSide.SELL,
@@ -192,24 +196,24 @@ class SimBroker(Broker):
 
         side = position.side
         units = units if units is not None else position.units
-        if side == "BUY":
-            self.__create_order(
-                position.symbol,
-                "MKT",
-                "SELL",
-                units,
-                price=None,
+        if side == OrderSide.BUY:
+            order = self._order_manager.create_order(
+                symbol=position.symbol,
+                order_type=OrderType.MARKET,
+                side=OrderSide.SELL,
+                units=units,
                 position_id=position.id,
             )
+            self.__submit(order)
         else:
-            self.__create_order(
-                position.symbol,
-                "MKT",
-                "BUY",
-                units,
-                price=None,
+            order = self._order_manager.create_order(
+                symbol=position.symbol,
+                order_type=OrderType.MARKET,
+                side=OrderSide.BUY,
+                units=units,
                 position_id=position.id,
             )
+            self.__submit(order)
 
     def close_all_positions(self) -> None:
         """Close all open positions."""
@@ -228,114 +232,109 @@ class SimBroker(Broker):
                 )
                 close_all(positions)
 
-    def __submit(self, order: Order):
-        if order.order_type == "MKT":
-            if self._exec_price == "current":
-                self.execute_order(order)
-            elif self._exec_price == "next":
-                self.pending_orders.put(order)
-        elif order.order_type == "LMT" or order.order_type == "STP":
-            self.pending_orders.put(order)
+    def __submit(self, order: Order | ReverseOrder | int) -> None:
+        if isinstance(order, Order):  # Market order
+            self.execute_order(order)
+        elif isinstance(order, ReverseOrder):  # Reverses net position
+            self.execute_order(order.close_order)
+            self.execute_order(order.open_order)
+        else:  # Pending order
+            self.event_manager.notify(
+                ORDEREVENT, self._order_manager.pending_orders[order]
+            )
 
-    def execute_order(self, event: Order) -> None:
+    def execute_pending_orders(self) -> None:
+        """Executes pending orders. Called when new market data is received."""
+        executed_orders = []
+        for order_id in self._order_manager.pending_orders:
+            order = self._order_manager.pending_orders[order_id]
+            if isinstance(order, ReverseOrder):
+                self.__submit(order)
+                executed_orders.append(order_id)
+            else:
+                if order.order_type == OrderType.MARKET:
+                    self.__submit(order)
+                    executed_orders.append(order_id)
+                elif order.order_type == OrderType.LIMIT:
+                    bar = self.data_handler.get_latest_bars(order.symbol)[-1]
+                    if order.side == OrderSide.BUY:
+                        if bar.low <= order.price:
+                            self.execute_order(order)
+                            executed_orders.append(order_id)
+                    else:
+                        if bar.high >= order.price:
+                            self.execute_order(order)
+                            executed_orders.append(order_id)
+                else:
+                    bar = self.data_handler.get_latest_bars(order.symbol)[-1]
+                    if order.side == OrderSide.BUY:
+                        if bar.high >= order.price:
+                            self.execute_order(order)
+                            executed_orders.append(order_id)
+                    else:
+                        if bar.low <= order.price:
+                            self.execute_order(order)
+                            executed_orders.append(order_id)
+
+        for order_id in executed_orders:
+            del self._order_manager.pending_orders[order_id]
+
+    def execute_order(self, order: Order) -> None:
         """
         Convert Order objects into Fill objects naively,
         i.e., without any latency, slippage, or fill ratio problems.
 
         Parameters
         ----------
-        event : Order
-            Contains an Event object with order information.
-
-        Raises
-        ------
-        TypeError
-            If the provided event is not an Order.
+        order : Order
+            Contains an object with order information.
         """
-        if not isinstance(event, Order):
-            raise TypeError(f"Expected an Order object. Got {type(event).__name__}")
-
-        if event.order_type == "MKT":
+        if order.order_type == OrderType.MARKET:
             if self._exec_price == "next":
-                price = self.data_handler.get_latest_price(event.symbol, "open")
+                price = self.data_handler.get_latest_price(order.symbol, "open")
             else:
-                price = self.data_handler.get_latest_price(event.symbol)
-        elif event.order_type == "LMT" or event.order_type == "STP":
-            price = event.price
+                price = self.data_handler.get_latest_price(order.symbol)
+        elif order.order_type == OrderType.LIMIT or order.order_type == OrderType.STOP:
+            price = order.price
 
-        if event.request == "open":  # Order request type
-            cost = self.__get_cost(event, price)
+        if order.request == "open":  # Order request type
+            cost = self.__get_cost(order, price)
             if cost < self.free_margin:
                 fill_event = Fill(
                     self.data_handler.current_datetime,
-                    event.symbol,
-                    event.units,
-                    event.side,
+                    order.symbol,
+                    order.units,
+                    order.side,
                     price,
                     self.commission,
-                    order_id=event.order_id,
-                    position_id=event.position_id,
+                    order_id=order.order_id,
+                    position_id=order.position_id,
                 )
-                event.execute()
-                self.order_history.append(event)
+                order.execute()
+                self._order_manager.history.append(order)
                 self.update_account(fill_event)
-
-                self.events.put(event)
-                self.events.put(fill_event)
+                self.event_manager.notify(FILLEVENT, fill_event)
             else:
-                event.reject()
-                self.order_history.append(event)
+                order.reject()
+                self._order_manager.history.append(order)
+                self.event_manager.notify(ORDEREVENT, order)
 
         else:  # Close an existing position
             fill_event = Fill(
                 self.data_handler.current_datetime,
-                event.symbol,
-                event.units,
-                event.side,
+                order.symbol,
+                order.units,
+                order.side,
                 price,
                 self.commission,
                 "close",
-                event.order_id,
-                event.position_id,
+                order.order_id,
+                order.position_id,
             )
-            event.execute()
-            self.order_history.append(event)
+            order.execute()
+            self._order_manager.history.append(order)
             self.update_account(fill_event)
-
-            self.events.put(event)
-            self.events.put(fill_event)
-
-    def execute_pending_orders(self) -> None:
-        if not self.pending_orders.empty():
-            n_pending = len(self.pending_orders.queue)
-            for _ in range(n_pending):
-                order = self.pending_orders.get(False)
-                if order.order_type == "MKT":
-                    self.execute_order(order)
-                else:
-                    bar = self.data_handler.get_latest_bars(order.symbol)[0]
-                    if order.order_type == "LMT":
-                        if order.side == "BUY":
-                            if bar.low <= order.price:
-                                self.execute_order(order)
-                            else:  # Add order back to pending order queue
-                                self.events.put(order)
-                        else:
-                            if bar.high >= order.price:
-                                self.execute_order(order)
-                            else:
-                                self.events.put(order)
-                    elif order.order_type == "STP":
-                        if order.side == "BUY":
-                            if bar.high >= order.price:
-                                self.execute_order(order)
-                            else:
-                                self.events.put(order)
-                        else:
-                            if bar.low <= order.price:
-                                self.execute_order(order)
-                            else:
-                                self.events.put(order)
+            self.event_manager.notify(FILLEVENT, fill_event)
 
     def __get_cost(self, event: Order, price) -> float:
         if self.acct_mode == "netting":
@@ -347,15 +346,13 @@ class SimBroker(Broker):
         else:
             return (event.units * price) / self.leverage
 
-    def update_account(self, event: Market | Fill):
-        """
-        Update the account details based on market or fill events.
+    def update(self, event: None = None) -> None:
+        """Updates account values when a market event occurs."""
+        self.execute_pending_orders()
+        self.update_account(event=event)
 
-        Parameters
-        ----------
-        event
-            The event to update the account from.
-        """
+    def update_account(self, event: None | Fill) -> None:
+        """Update the account info based on market or fill events."""
         self.__update_positions(event)
         self.__update_fund_values(event)
         self.__update_account_history(event)
@@ -363,33 +360,23 @@ class SimBroker(Broker):
         if self.__margin_call():
             self._stop_simulation()
 
-    def __update_positions(self, event: Market | Fill) -> None:
+    def __update_positions(self, event: None | Fill) -> None:
         """Update positions based on market or fill events."""
-        if isinstance(event, Market):
+        if event is None:  # Market event occurred
             self.__update_positions_on_market()
         elif isinstance(event, Fill):
             self.__update_positions_on_fill(event)
-            order = self.order_history[-1]
-            if event.result == "open" and order.timestamp < event.timestamp:
-                # Update PnL if a filled position was executed from pending order
-                position = self.get_position(event.symbol)
-                if isinstance(position, list):  # Hedging account
-                    position[-1].update(
-                        self.data_handler.get_latest_price(event.symbol)
-                    )
-                elif isinstance(position, Position):  # Netting account
-                    position.update(self.data_handler.get_latest_price(event.symbol))
 
     def __update_positions_on_fill(self, event: Fill) -> None:
         """Add new positions to the porfolio"""
-        self.p_manager.update_position_on_fill(event)
+        self._p_manager.update_position_on_fill(event)
 
     def __update_positions_on_market(self) -> None:
         """Update portfolio holdings with the latest market price"""
-        self.p_manager.update_position_on_market()
+        self._p_manager.update_position_on_market()
 
-    def __update_fund_values(self, event: Market | Fill) -> None:
-        if isinstance(event, Market):
+    def __update_fund_values(self, event: None | Fill) -> None:
+        if event is None:  # Market event occurred
             self.__update_equity()
             self.__update_free_margin()
         elif isinstance(event, Fill):
@@ -400,24 +387,25 @@ class SimBroker(Broker):
     def __update_balance(self) -> None:
         """Update the account balance based on closed position from a fill event."""
         if len(self.get_positions_history()) > self.__pos_hist_total:
-            self.balance += self.p_manager.history[-1].pnl
+            self.balance += self._p_manager.history[-1].pnl
 
     def __update_equity(self) -> None:
         """Update the account equity based on market or fill events."""
-        self.equity = self.balance + self.p_manager.get_total_pnl()
+        self.equity = self.balance + self._p_manager.get_total_pnl()
 
     def __update_free_margin(self) -> None:
         """Update the free margin available for opening positions."""
         self.free_margin = self.equity - self.get_used_margin()
 
-    def __update_account_history(self, event: Market | Fill) -> None:
+    def __update_account_history(self, event: None | Fill) -> None:
         """Update the account history based on market or fill events."""
         timestamp = self.data_handler.current_datetime
-        if isinstance(event, Market):
+        if event is None:
             self.account_history.append(
                 {"timestamp": timestamp, "balance": self.balance, "equity": self.equity}
             )
         elif isinstance(event, Fill):
+            # If open positions change due to multiple operation on the same bar
             if len(self.get_positions_history()) > self.__pos_hist_total:
                 recent_history = self.account_history[-1]
                 if timestamp == recent_history["timestamp"]:
@@ -430,7 +418,7 @@ class SimBroker(Broker):
         except ZeroDivisionError:
             return False
         else:
-            if margin_level <= self.__stop_out_level:
+            if margin_level <= self._stop_out_level:
                 return True
             return False
 
@@ -452,22 +440,38 @@ class SimBroker(Broker):
         margin = margin / self.leverage
         return margin
 
-    def get_position(self, symbol: str) -> Position | list[Position] | None:
+    def get_position(self, identifier: str | int) -> Position | list[Position] | None:
         """
-        Get the current position for a given symbol.
+        Get the current position(s) for a given symbol.
 
         Parameters
         ----------
-        symbol
-            The symbol to get the position for.
+        identifier
+            The identifier for the position. For netting account, the identifier
+            must be a str (symbol name). However, for hedging account the identifier
+            can be a str (symbol name) or int (position id).
 
         Returns
         -------
         Position
-            The current position for the symbol if account mode is Netting or list of
-            open position for the symbol if account mode is Hedging.
+            If account mode is "netting" and identifier is type str (position symbol)
+            If account mode is "hedging" and identifier is type int (position id)
+        list[Position]
+            If account mode is "hedging" and identifier is type str (position symbol)
+        None
+            If there is no open position with the identifier
+
+
+        Raises
+        ------
+        ValueError
+            If account mode is netting and identifier is type int.
         """
-        return self.p_manager.get_position(symbol)
+        if self.acct_mode == "netting" and isinstance(identifier, int):
+            raise ValueError(
+                "Net account positions can only be accessed by symbol name"
+            )
+        return self._p_manager.get_position(identifier)  # type: ignore[arg-type]
 
     def get_positions(self) -> dict[str | int, Position]:
         """
@@ -479,7 +483,7 @@ class SimBroker(Broker):
             The positions dictionary. The keys are the symbol names if account
             mode is netting or position ID if account mode is hedging.
         """
-        return self.p_manager.positions
+        return self._p_manager.positions
 
     def get_positions_history(self) -> list[Position]:
         """
@@ -490,7 +494,24 @@ class SimBroker(Broker):
         list
             The history of positions.
         """
-        return self.p_manager.history
+        return self._p_manager.history
+
+    def get_order_history(self, N: None | int = 1) -> list:
+        """
+        Get the history of submitted orders.
+
+        Parameters
+        ----------
+        N : Optional
+            The number of historical orders to return. If None, then the full order
+            history is returned
+
+        Returns
+        -------
+        list
+            Order history
+        """
+        return self._order_manager.history[-N:] if N else self._order_manager.history
 
     def get_account_history(self) -> dict[str, pd.DataFrame]:
         """
@@ -512,6 +533,7 @@ class SimBroker(Broker):
             columns={"fill_price": "open_price", "last_price": "close_price"},
             inplace=True,
         )
+        position_history["side"] = position_history["side"].astype(str)
         position_history = position_history.reindex(
             columns=[
                 "symbol",
@@ -527,8 +549,12 @@ class SimBroker(Broker):
             ]
         )
 
-        order_history = [vars(order) for order in self.order_history]
+        order_history = [vars(order) for order in self.get_order_history(None)]
         order_history = pd.DataFrame.from_records(order_history)
+        order_history["side"] = order_history["side"].astype(str)
+        order_history["order_type"] = order_history["order_type"].astype(str)
+        order_history["status"] = order_history["status"].astype(str)
+
         return {
             "balance_equity": balance_equity,
             "positions": position_history,
@@ -542,6 +568,5 @@ class SimBroker(Broker):
         self.equity = balance
         self.free_margin = balance
         self.account_history = []
-        self.order_history = []
-        self.pending_orders = Queue()
-        self.p_manager.reset()
+        self._p_manager.reset()
+        self._order_manager.reset()

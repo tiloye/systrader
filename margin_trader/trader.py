@@ -1,39 +1,29 @@
-import queue
-
 from margin_trader.broker import SimBroker
 from margin_trader.data_handlers import BacktestDataHandler
+from margin_trader.event import FILLEVENT, MARKETEVENT, ORDEREVENT, EventManager
 
 
 class Trader:
     def __init__(self, data_handler, broker, strategy):
-        self.events = queue.Queue()
+        self.data_event_manager = EventManager()
+        self.broker_event_manager = EventManager()
+
         self.data_handler = data_handler
-        self.data_handler.add_event_queue(self.events)
+        self.data_handler.add_event_manager(self.data_event_manager)
 
         self.broker = broker
-        self.broker.add_event_queue(self.events)
+        self.broker.add_event_manager(self.broker_event_manager)
+        self.broker.add_data_handler(self.data_handler)
 
         self.strategy = strategy
-        self.strategy.add_event_queue(self.events)
         self.strategy.add_data_handler(self.data_handler)
-        self.strategy.add_broker(broker)
+        self.strategy.add_broker(self.broker)
 
-    def _handle_events(self) -> None:
-        while True:
-            try:
-                event = self.events.get(False)
-            except queue.Empty:
-                break
-            else:
-                if event is not None:
-                    if event.type == "MARKET":
-                        self.broker.execute_pending_orders()
-                        self.broker.update_account(event)
-                        self.strategy.on_market()
-                    elif event.type == "ORDER":
-                        self.strategy.on_order(event)
-                    elif event.type == "FILL":
-                        self.strategy.on_fill(event)
+        self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
+        self.data_handler.event_manager.subscribe(MARKETEVENT, self.strategy)
+
+        self.broker.event_manager.subscribe(ORDEREVENT, self.strategy)
+        self.broker.event_manager.subscribe(FILLEVENT, self.strategy)
 
     def _run_backtest(self):
         """Execute the strategy in an event loop."""
@@ -43,10 +33,10 @@ class Trader:
             self.data_handler.update_bars()
             if not self.data_handler.continue_backtest:
                 self.broker.close_all_positions()
-                self._handle_events()
+                # self._handle_events()
                 self.account_history = self.broker.get_account_history()
                 break
-            self._handle_events()
+            # self._handle_events()
         print("Finished running backtest")
 
     def _run_live(self, **kwargs):

@@ -2,28 +2,29 @@ import datetime as dt
 import unittest
 from unittest.mock import patch
 
+from margin_trader.broker.fill import Fill
 from margin_trader.broker.position import (
     HedgePositionManager,
     NetPositionManager,
     Position,
 )
-from margin_trader.event import Fill
+from margin_trader.constants import OrderSide
 
-MOCK_SOURCE = "margin_trader.data_handlers.BackTestDataHanlder"
+MOCK_SOURCE = "margin_trader.broker.sim_broker.SimBroker"
 SYMBOL = "SYMBOL1"
 
 
 class TestNetPositionManager(unittest.TestCase):
-    @patch("margin_trader.data_handlers.data_handler.BacktestDataHandler")
-    def setUp(self, mock_data_handler):
-        mock_data_handler.get_latest_price.return_value = 160.0
+    @patch(MOCK_SOURCE)
+    def setUp(self, mock_broker):
+        mock_broker.data_handler.get_latest_price.return_value = 160.0
 
-        self.manager = NetPositionManager(data_handler=mock_data_handler)
+        self.manager = NetPositionManager(broker=mock_broker)
         self.event = Fill(
             timestamp=dt.datetime(2024, 5, 6),
             symbol=SYMBOL,
             units=100,
-            side="BUY",
+            side=OrderSide.BUY,
             fill_price=150.0,
             commission=0.5,
             result="open",
@@ -53,7 +54,7 @@ class TestNetPositionManager(unittest.TestCase):
             timestamp=dt.datetime(2024, 5, 7),
             symbol=SYMBOL,
             units=50,
-            side="BUY",
+            side=OrderSide.BUY,
             fill_price=160.0,
             commission=0.5,
             result="open",
@@ -69,7 +70,7 @@ class TestNetPositionManager(unittest.TestCase):
         self.manager.update_position_on_fill(self.event)
         new_fill = self.event
         new_fill.timestamp = dt.datetime(2024, 5, 7)
-        new_fill.side = "SELL"
+        new_fill.side = OrderSide.SELL
         new_fill.result = "close"
         self.manager.update_position_on_fill(new_fill)
         closed_pos = self.manager.history[-1]
@@ -84,7 +85,7 @@ class TestNetPositionManager(unittest.TestCase):
         self.manager.update_position_on_fill(self.event)
         new_fill = self.event
         new_fill.timestamp = dt.datetime(2024, 5, 7)
-        new_fill.side = "SELL"
+        new_fill.side = OrderSide.SELL
         new_fill.result = "open"
         self.manager.update_position_on_fill(new_fill)
         closed_pos = self.manager.history[-1]
@@ -101,7 +102,7 @@ class TestNetPositionManager(unittest.TestCase):
             timestamp=dt.datetime(2024, 5, 7),
             symbol=SYMBOL,
             units=50,
-            side="SELL",
+            side=OrderSide.SELL,
             fill_price=160.0,
             commission=0.5,
             result="close",
@@ -127,7 +128,7 @@ class TestNetPositionManager(unittest.TestCase):
             timestamp=dt.datetime(2024, 5, 6),
             symbol="SYMBOL2",
             units=100,
-            side="BUY",
+            side=OrderSide.BUY,
             fill_price=150.0,
             commission=0.5,
             result="open",
@@ -146,16 +147,16 @@ class TestNetPositionManager(unittest.TestCase):
 
 
 class TestHedgePositionManager(unittest.TestCase):
-    @patch("margin_trader.data_handlers.data_handler.BacktestDataHandler")
-    def setUp(self, mock_data_handler):
-        mock_data_handler.get_latest_price.return_value = 160.0
+    @patch(MOCK_SOURCE)
+    def setUp(self, mock_broker):
+        mock_broker.data_handler.get_latest_price.return_value = 160.0
 
-        self.manager = HedgePositionManager(data_handler=mock_data_handler)
+        self.manager = HedgePositionManager(broker=mock_broker)
         self.event = Fill(
             timestamp=dt.datetime(2024, 5, 6),
             symbol=SYMBOL,
             units=100,
-            side="BUY",
+            side=OrderSide.BUY,
             fill_price=150.0,
             commission=0.5,
             result="open",
@@ -184,7 +185,7 @@ class TestHedgePositionManager(unittest.TestCase):
             timestamp=dt.datetime(2024, 5, 7),
             symbol=SYMBOL,
             units=50,
-            side="BUY",
+            side=OrderSide.BUY,
             fill_price=160.0,
             commission=0.5,
             result="open",
@@ -202,7 +203,7 @@ class TestHedgePositionManager(unittest.TestCase):
             timestamp=dt.datetime(2024, 5, 7),
             symbol=SYMBOL,
             units=self.position.units,
-            side="SELL",
+            side=OrderSide.SELL,
             fill_price=160.0,
             commission=0.5,
             result="close",

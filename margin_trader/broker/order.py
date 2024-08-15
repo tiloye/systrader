@@ -4,7 +4,7 @@ from collections import namedtuple
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
-from margin_trader.constants import OrderSide, OrderType
+from margin_trader.constants import OrderSide, OrderStatus, OrderType
 from margin_trader.errors import (
     LimitOrderError,
     MarketOrderError,
@@ -13,11 +13,129 @@ from margin_trader.errors import (
     StopOrderError,
     TakeProfitPriceError,
 )
-from margin_trader.event import Order
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from margin_trader.broker.position import Position
     from margin_trader.broker.sim_broker import SimBroker
+
+
+class Order:
+    """
+    Represents an order event sent to an execution system.
+    The order contains a symbol (e.g. GOOG), a type (market, limit, or stop),
+    units and a direction.
+
+    Parameters
+    ----------
+    timestamp:
+        The time when the Order was created.
+    symbol
+        The symbol to trade.
+    order_type : OrderType
+        Type of order (MARKET, LIMIT, STOP).
+    units
+        Non-negative integer for order quantity.
+    side
+        'BUY' or 'SELL' for long or short.
+    price
+       Execution price of LIMIT or STOP orders.
+    sl
+        Stop loss price for closing the position.
+    tp
+        Take profit price for closing the position.
+    order_id
+        The ID of the order.
+    position_id
+        The ID of the position an order should operate on. Used to identify orders that
+        closed or modify a position.
+
+    Attributes
+    ----------
+    type : str
+        The type of the event, in this case 'ORDER'.
+    symbol : str
+        The symbol to trade.
+    order_type : OrderType
+        Type of order (MARKET, LIMIT, STOP).
+    units : int
+        Non-negative integer for order quantity.
+    side : OrderSide
+        BUY or SELL for long or short.
+    price : float | None
+        Execution price of LIMIT or STOP orders.
+    sl : float | None
+        Stop loss price for closing the position.
+    tp : float | None
+        Take profit price for closing the position.
+    status : str
+        The status of the order.
+    request : str
+        The type of request the order fulfilled. Can be "open" (opened a position) or
+        "close" (closed a position).
+    order_id : int
+        The ID of the order (assigned by broker).
+    position_id: int
+        The ID of the position an order should operate on. Used to identify orders that
+        closed or modify a position.
+    """
+
+    def __init__(
+        self,
+        *,
+        timestamp: datetime,
+        symbol: str,
+        order_type: OrderType,
+        units: int,
+        side: OrderSide,
+        price: float | None = None,
+        sl: float | None = None,
+        tp: float | None = None,
+        order_id: int = 0,
+        position_id: int = 0,
+    ) -> None:
+        self.timestamp = timestamp
+        self.symbol = symbol
+        self.order_type = order_type
+        self.units = units
+        self.side = side
+        self.price = price
+        self.sl = sl
+        self.tp = tp
+        self.status = OrderStatus.PENDING
+        self.order_id = order_id
+        self.position_id = position_id
+        self.request = ""
+
+    def execute(self) -> None:
+        self.status = OrderStatus.EXECUTED
+
+    def reject(self) -> None:
+        self.status = OrderStatus.REJECTED
+
+    def is_bracket_order(self):
+        if isinstance(self.sl, float) and isinstance(self.tp, float):
+            return True
+        return False
+
+    def is_cover_order(self):
+        if self.sl is not None and self.tp is None:
+            return True
+        elif self.sl is None and self.tp is not None:
+            return True
+        else:
+            return False
+
+    def print_order(self) -> None:
+        """
+        Outputs the values within the Order.
+        """
+        print(
+            "Order: Symbol=%s, Type=%s, units=%s, Direction=%s"
+            % (self.symbol, self.order_type, self.units, self.side)
+        )
+
 
 CoverOrder = namedtuple("CoverOrder", ["primary_order", "cover_order", "id"])
 BracketOrder = namedtuple(
@@ -222,8 +340,8 @@ class OrderManager:
             ):  # Call from broker's buy or sell method
                 if order.units > pos.units:  # type: ignore
                     return self.__create_reverse_order(order, pos)  # type: ignore
-                elif order.units <= pos.units:
-                    order.position_id = pos.id
+                elif order.units <= pos.units:  # type: ignore
+                    order.position_id = pos.id  # type: ignore
                     order.request = "close"
                     return self.__create_regular_order(order)
                 else:

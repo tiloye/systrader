@@ -104,7 +104,7 @@ class TestOrder(unittest.TestCase):
             self.assertEqual(expected_output, output)
 
 
-class TestMarketOrderCreation(unittest.TestCase):
+class TestOrderManager(unittest.TestCase):
     def setUp(self) -> None:
         self.broker = Mock()
         self.broker.data_handler.current_datetime = TIMESTAMP
@@ -114,9 +114,9 @@ class TestMarketOrderCreation(unittest.TestCase):
 
     def test_create_mkt_order(self):
         for acct_mode in ["netting", "hedging"]:
-            self.broker.acct_mode = acct_mode
-            for side, id_ in zip(OrderSide, [1, 2]):
+            for side in OrderSide:
                 with self.subTest(msg=f"{acct_mode} account", side=side):
+                    self.setUp()
                     self.broker.acct_mode = acct_mode
                     order = self.order_manager.create_order(
                         symbol=SYMBOL, order_type=OrderType.MARKET, side=side
@@ -125,11 +125,48 @@ class TestMarketOrderCreation(unittest.TestCase):
                     self.assertEqual(order.timestamp, TIMESTAMP)
                     self.assertEqual(order.symbol, SYMBOL)
                     self.assertEqual(order.request, "open")
-                    self.assertEqual(order.order_id, id_)
-                    self.assertEqual(order.position_id, id_)
+                    self.assertEqual(order.order_id, 1)
+                    self.assertEqual(order.position_id, 1)
                     self.assertEqual(order.side, side)
                     self.assertEqual(order.units, 100)
-            self.order_manager.reset()
+
+    def test_create_lmt_order(self):
+        for acct_mode in ["netting", "hedging"]:
+            for side, price in zip(OrderSide, [100.0, 104.0]):
+                with self.subTest(msg=f"{acct_mode} account", side=side):
+                    self.setUp()
+                    self.broker.acct_mode = acct_mode
+                    order_id = self.order_manager.create_order(
+                        symbol=SYMBOL,
+                        order_type=OrderType.LIMIT,
+                        side=side,
+                        price=price,
+                    )
+                    order = self.order_manager.pending_orders[order_id]
+
+                    self.assertEqual(order.order_type, OrderType.LIMIT)
+                    self.assertEqual(order.side, side)
+                    self.assertEqual(order.price, price)
+                    self.assertEqual(order.order_id, 1)
+
+    def test_create_stp_order(self):
+        for acct_mode in ["netting", "hedging"]:
+            for side, price in zip(OrderSide, [104.0, 100.0]):
+                with self.subTest(msg=f"{acct_mode} account", side=side):
+                    self.setUp()
+                    self.broker.acct_mode = acct_mode
+                    order_id = self.order_manager.create_order(
+                        symbol=SYMBOL,
+                        order_type=OrderType.STOP,
+                        side=side,
+                        price=price,
+                    )
+                    order = self.order_manager.pending_orders[order_id]
+
+                    self.assertEqual(order.order_type, OrderType.STOP)
+                    self.assertEqual(order.side, side)
+                    self.assertEqual(order.price, price)
+                    self.assertEqual(order.order_id, 1)
 
     def test_create_pending_mkt_order(self):
         # When broker account is set to execute trades at next available price, then
@@ -186,13 +223,89 @@ class TestMarketOrderCreation(unittest.TestCase):
                         self.assertEqual(corder.cover_order.side, OrderSide.BUY)
             self.order_manager.reset()
 
+    def test_create_lmt_cover_order_sl(self):
+        for acct_mode in ["netting", "hedging"]:
+            for side, price, sl_price in zip(OrderSide, [100.0, 104.0], [95.0, 106.0]):
+                with self.subTest(
+                    msg=f"{acct_mode} account", side=side, tp_price=sl_price
+                ):
+                    self.setUp()
+
+                    self.broker.acct_mode = acct_mode
+                    order_id = self.order_manager.create_order(
+                        symbol=SYMBOL,
+                        order_type=OrderType.LIMIT,
+                        side=side,
+                        price=price,
+                        sl=sl_price,
+                    )
+                    c_order = self.order_manager.pending_orders[order_id]
+                    p_order = c_order.primary_order
+                    sl_order = c_order.cover_order
+
+                    self.assertIsInstance(c_order, CoverOrder)
+                    self.assertIsNotNone(p_order)
+                    self.assertEqual(p_order.timestamp, sl_order.timestamp)
+                    self.assertEqual(p_order.symbol, sl_order.symbol)
+                    self.assertEqual(p_order.order_id, sl_order.order_id)
+                    self.assertEqual(p_order.position_id, sl_order.position_id)
+                    self.assertEqual(p_order.units, sl_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(sl_order.request, "close")
+                    self.assertEqual(sl_order.order_type, OrderType.STOP)
+                    self.assertEqual(sl_order.price, sl_price)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(sl_order.side, OrderSide.SELL)
+                    else:
+                        self.assertEqual(sl_order.side, OrderSide.BUY)
+
+    def test_create_stp_cover_order_sl(self):
+        for acct_mode in ["netting", "hedging"]:
+            for side, price, sl_price in zip(OrderSide, [104.0, 100.0], [100.0, 105.0]):
+                with self.subTest(
+                    msg=f"{acct_mode} account", side=side, tp_price=sl_price
+                ):
+                    self.setUp()
+
+                    self.broker.acct_mode = acct_mode
+                    order_id = self.order_manager.create_order(
+                        symbol=SYMBOL,
+                        order_type=OrderType.STOP,
+                        side=side,
+                        price=price,
+                        sl=sl_price,
+                    )
+                    c_order = self.order_manager.pending_orders[order_id]
+                    p_order = c_order.primary_order
+                    sl_order = c_order.cover_order
+
+                    self.assertIsInstance(c_order, CoverOrder)
+                    self.assertIsNotNone(p_order)
+                    self.assertEqual(p_order.timestamp, sl_order.timestamp)
+                    self.assertEqual(p_order.symbol, sl_order.symbol)
+                    self.assertEqual(p_order.order_id, sl_order.order_id)
+                    self.assertEqual(p_order.position_id, sl_order.position_id)
+                    self.assertEqual(p_order.units, sl_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.STOP)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(sl_order.request, "close")
+                    self.assertEqual(sl_order.order_type, OrderType.STOP)
+                    self.assertEqual(sl_order.price, sl_price)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(sl_order.side, OrderSide.SELL)
+                    else:
+                        self.assertEqual(sl_order.side, OrderSide.BUY)
+
     def test_create_mkt_cover_order_tp(self):
         for acct_mode in ["netting", "hedging"]:
-            self.broker.acct_mode = acct_mode
             for side, tp_price in zip(OrderSide, [104.0, 100.0]):
                 with self.subTest(
                     msg=f"{acct_mode} account", side=side, tp_price=tp_price
                 ):
+                    self.setUp()
+
+                    self.broker.acct_mode = acct_mode
                     order = self.order_manager.create_order(
                         symbol=SYMBOL,
                         order_type=OrderType.MARKET,
@@ -217,16 +330,91 @@ class TestMarketOrderCreation(unittest.TestCase):
                         self.assertEqual(corder.cover_order.side, OrderSide.SELL)
                     else:
                         self.assertEqual(corder.cover_order.side, OrderSide.BUY)
-            self.order_manager.reset()
+
+    def test_create_lmt_cover_order_tp(self):
+        for acct_mode in ["netting", "hedging"]:
+            for side, price, tp_price in zip(OrderSide, [100.0, 104.0], [104.0, 100.0]):
+                with self.subTest(
+                    msg=f"{acct_mode} account", side=side, tp_price=tp_price
+                ):
+                    self.setUp()
+
+                    self.broker.acct_mode = acct_mode
+                    order_id = self.order_manager.create_order(
+                        symbol=SYMBOL,
+                        order_type=OrderType.LIMIT,
+                        side=side,
+                        price=price,
+                        tp=tp_price,
+                    )
+                    c_order = self.order_manager.pending_orders[order_id]
+                    p_order = c_order.primary_order
+                    tp_order = c_order.cover_order
+
+                    self.assertIsInstance(c_order, CoverOrder)
+                    self.assertIsNotNone(p_order)
+                    self.assertEqual(p_order.timestamp, tp_order.timestamp)
+                    self.assertEqual(p_order.symbol, tp_order.symbol)
+                    self.assertEqual(p_order.order_id, tp_order.order_id)
+                    self.assertEqual(p_order.position_id, tp_order.position_id)
+                    self.assertEqual(p_order.units, tp_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(tp_order.request, "close")
+                    self.assertEqual(tp_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(tp_order.price, tp_price)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(tp_order.side, OrderSide.SELL)
+                    else:
+                        self.assertEqual(tp_order.side, OrderSide.BUY)
+
+    def test_create_stp_cover_order_tp(self):
+        for acct_mode in ["netting", "hedging"]:
+            for side, price, tp_price in zip(OrderSide, [104.0, 100.0], [108.0, 95.0]):
+                with self.subTest(
+                    msg=f"{acct_mode} account", side=side, tp_price=tp_price
+                ):
+                    self.setUp()
+
+                    self.broker.acct_mode = acct_mode
+                    order_id = self.order_manager.create_order(
+                        symbol=SYMBOL,
+                        order_type=OrderType.STOP,
+                        side=side,
+                        price=price,
+                        tp=tp_price,
+                    )
+                    c_order = self.order_manager.pending_orders[order_id]
+                    p_order = c_order.primary_order
+                    tp_order = c_order.cover_order
+
+                    self.assertIsInstance(c_order, CoverOrder)
+                    self.assertIsNotNone(p_order)
+                    self.assertEqual(p_order.timestamp, tp_order.timestamp)
+                    self.assertEqual(p_order.symbol, tp_order.symbol)
+                    self.assertEqual(p_order.order_id, tp_order.order_id)
+                    self.assertEqual(p_order.position_id, tp_order.position_id)
+                    self.assertEqual(p_order.units, tp_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.STOP)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(tp_order.request, "close")
+                    self.assertEqual(tp_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(tp_order.price, tp_price)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(tp_order.side, OrderSide.SELL)
+                    else:
+                        self.assertEqual(tp_order.side, OrderSide.BUY)
 
     def test_create_pending_mkt_cover_order_sl(self):
-        self.broker._exec_price = "next"
         for acct_mode in ["netting", "hedging"]:
-            self.broker.acct_mode = acct_mode
             for side, sl_price in zip(OrderSide, [100.0, 104.0]):
                 with self.subTest(
                     msg=f"{acct_mode} account", side=side, sl_price=sl_price
                 ):
+                    self.setUp()
+
+                    self.broker.acct_mode = acct_mode
+                    self.broker._exec_price = "next"
                     order_id = self.order_manager.create_order(
                         symbol=SYMBOL,
                         order_type=OrderType.MARKET,
@@ -252,7 +440,6 @@ class TestMarketOrderCreation(unittest.TestCase):
                         self.assertEqual(cover_order.side, OrderSide.SELL)
                     else:
                         self.assertEqual(cover_order.side, OrderSide.BUY)
-            self.order_manager.reset()
 
     def test_create_pending_mkt_cover_order_tp(self):
         self.broker._exec_price = "next"
@@ -291,7 +478,6 @@ class TestMarketOrderCreation(unittest.TestCase):
 
     def test_create_mkt_bracket_order(self):
         for acct_mode in ["netting", "hedging"]:
-            self.broker.acct_mode = acct_mode
             for side, tp_price, sl_price in zip(
                 OrderSide, [104.0, 100.0], [100.0, 104.0]
             ):
@@ -301,6 +487,8 @@ class TestMarketOrderCreation(unittest.TestCase):
                     tp_price=tp_price,
                     sl_price=sl_price,
                 ):
+                    self.setUp()
+                    self.broker.acct_mode = acct_mode
                     order = self.order_manager.create_order(
                         symbol=SYMBOL,
                         order_type=OrderType.MARKET,
@@ -333,7 +521,6 @@ class TestMarketOrderCreation(unittest.TestCase):
                     else:
                         self.assertEqual(sl_order.side, OrderSide.BUY)
                         self.assertEqual(tp_order.side, OrderSide.BUY)
-            self.order_manager.reset()
 
     def test_create_pending_mkt_bracket_order(self):
         self.broker._exec_price = "next"
@@ -381,6 +568,106 @@ class TestMarketOrderCreation(unittest.TestCase):
                         self.assertEqual(sl_order.side, OrderSide.BUY)
                         self.assertEqual(tp_order.side, OrderSide.BUY)
             self.order_manager.reset()
+
+    def test_create_lmt_bracket_order(self):
+        for acct_mode in ["netting", "hedging"]:
+            for side, price, tp_price, sl_price in zip(
+                OrderSide, [100.0, 104.0], [104.0, 100.0], [95.0, 106.0]
+            ):
+                with self.subTest(
+                    msg=f"{acct_mode} account",
+                    side=side,
+                    price=price,
+                    tp_price=tp_price,
+                    sl_price=sl_price,
+                ):
+                    self.setUp()
+                    self.broker.acct_mode = acct_mode
+                    order_id = self.order_manager.create_order(
+                        symbol=SYMBOL,
+                        order_type=OrderType.LIMIT,
+                        side=side,
+                        price=price,
+                        tp=tp_price,
+                        sl=sl_price,
+                    )
+                    border = self.order_manager.pending_orders[order_id]
+                    p_order = border.primary_order
+                    sl_order = border.stop_order
+                    tp_order = border.limit_order
+
+                    self.assertIsInstance(border, BracketOrder)
+                    self.assertIsNotNone(p_order)
+                    self.assertEqual(border.id, 1)
+                    self.assertEqual(p_order.order_id, 1)
+                    self.assertEqual(p_order.symbol, sl_order.symbol)
+                    self.assertEqual(p_order.symbol, tp_order.symbol)
+                    self.assertEqual(p_order.units, sl_order.units)
+                    self.assertEqual(p_order.units, tp_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(sl_order.request, "close")
+                    self.assertEqual(tp_order.request, "close")
+                    self.assertEqual(sl_order.order_type, OrderType.STOP)
+                    self.assertEqual(tp_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(sl_order.price, sl_price)
+                    self.assertEqual(tp_order.price, tp_price)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(sl_order.side, OrderSide.SELL)
+                        self.assertEqual(tp_order.side, OrderSide.SELL)
+                    else:
+                        self.assertEqual(sl_order.side, OrderSide.BUY)
+                        self.assertEqual(tp_order.side, OrderSide.BUY)
+
+    def test_create_stp_bracket_order(self):
+        for acct_mode in ["netting", "hedging"]:
+            for side, price, tp_price, sl_price in zip(
+                OrderSide, [104.0, 100.0], [106.0, 95.0], [102.0, 102.0]
+            ):
+                with self.subTest(
+                    msg=f"{acct_mode} account",
+                    side=side,
+                    price=price,
+                    tp_price=tp_price,
+                    sl_price=sl_price,
+                ):
+                    self.setUp()
+                    self.broker.acct_mode = acct_mode
+                    order_id = self.order_manager.create_order(
+                        symbol=SYMBOL,
+                        order_type=OrderType.STOP,
+                        side=side,
+                        price=price,
+                        tp=tp_price,
+                        sl=sl_price,
+                    )
+                    border = self.order_manager.pending_orders[order_id]
+                    p_order = border.primary_order
+                    sl_order = border.stop_order
+                    tp_order = border.limit_order
+
+                    self.assertIsInstance(border, BracketOrder)
+                    self.assertIsNotNone(p_order)
+                    self.assertEqual(border.id, 1)
+                    self.assertEqual(p_order.order_id, 1)
+                    self.assertEqual(p_order.symbol, sl_order.symbol)
+                    self.assertEqual(p_order.symbol, tp_order.symbol)
+                    self.assertEqual(p_order.units, sl_order.units)
+                    self.assertEqual(p_order.units, tp_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.STOP)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(sl_order.request, "close")
+                    self.assertEqual(tp_order.request, "close")
+                    self.assertEqual(sl_order.order_type, OrderType.STOP)
+                    self.assertEqual(tp_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(sl_order.price, sl_price)
+                    self.assertEqual(tp_order.price, tp_price)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(sl_order.side, OrderSide.SELL)
+                        self.assertEqual(tp_order.side, OrderSide.SELL)
+                    else:
+                        self.assertEqual(sl_order.side, OrderSide.BUY)
+                        self.assertEqual(tp_order.side, OrderSide.BUY)
 
     def test_net_acct_reversal_order(self):
         # Reversing a position by placing a reverse order 2 times more than the position

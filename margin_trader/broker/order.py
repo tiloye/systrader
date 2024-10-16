@@ -440,8 +440,8 @@ class OrderManager:
                 self.pending_orders[corder.id] = corder
                 return order
         else:  # lmt or stp order
-            self.pending_orders[corder.id] = corder.cover_order
-            return order
+            self.pending_orders[corder.id] = corder
+            return corder.id
 
     def __create_regular_order(self, order: Order) -> Order | int:
         # Create orders without bracket or cover orders

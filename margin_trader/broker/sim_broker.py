@@ -6,7 +6,7 @@ import pandas as pd
 
 from margin_trader.broker.broker import Broker
 from margin_trader.broker.fill import Fill
-from margin_trader.broker.order import Order, OrderManager, ReverseOrder
+from margin_trader.broker.order import CoverOrder, Order, OrderManager, ReverseOrder
 from margin_trader.broker.position import (
     HedgePositionManager,
     NetPositionManager,
@@ -246,35 +246,43 @@ class SimBroker(Broker, EventListener):
     def execute_pending_orders(self) -> None:
         """Executes pending orders. Called when new market data is received."""
         executed_orders = []
+
+        # TODO: Add execution logic for Cover or Bracket orders that have pending orders
+
+        def execute_lmt_stp_order(order):
+            if order.order_type == OrderType.LIMIT:
+                bar = self.data_handler.get_latest_bars(order.symbol)[-1]
+                if order.side == OrderSide.BUY:
+                    if bar.low <= order.price:
+                        self.execute_order(order)
+                else:
+                    if bar.high >= order.price:
+                        self.execute_order(order)
+            else:
+                bar = self.data_handler.get_latest_bars(order.symbol)[-1]
+                if order.side == OrderSide.BUY:
+                    if bar.high >= order.price:
+                        self.execute_order(order)
+                else:
+                    if bar.low <= order.price:
+                        self.execute_order(order)
+
         for order_id in self._order_manager.pending_orders:
             order = self._order_manager.pending_orders[order_id]
             if isinstance(order, ReverseOrder):
                 self.__submit(order)
                 executed_orders.append(order_id)
+            elif isinstance(order, CoverOrder):
+                corder = order.cover_order
+                execute_lmt_stp_order(corder)
+                executed_orders.append(order_id)
             else:
                 if order.order_type == OrderType.MARKET:
-                    self.__submit(order)
+                    self.execute_order(order)
                     executed_orders.append(order_id)
-                elif order.order_type == OrderType.LIMIT:
-                    bar = self.data_handler.get_latest_bars(order.symbol)[-1]
-                    if order.side == OrderSide.BUY:
-                        if bar.low <= order.price:
-                            self.execute_order(order)
-                            executed_orders.append(order_id)
-                    else:
-                        if bar.high >= order.price:
-                            self.execute_order(order)
-                            executed_orders.append(order_id)
                 else:
-                    bar = self.data_handler.get_latest_bars(order.symbol)[-1]
-                    if order.side == OrderSide.BUY:
-                        if bar.high >= order.price:
-                            self.execute_order(order)
-                            executed_orders.append(order_id)
-                    else:
-                        if bar.low <= order.price:
-                            self.execute_order(order)
-                            executed_orders.append(order_id)
+                    execute_lmt_stp_order(order)
+                    executed_orders.append(order_id)
 
         for order_id in executed_orders:
             del self._order_manager.pending_orders[order_id]

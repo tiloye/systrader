@@ -393,37 +393,7 @@ class TestSimBroker(unittest.TestCase):
             positions = broker.get_positions()
             self.assertEqual(len(positions), 0)
 
-    def test_buy_sell_mkt_with_sl(self):
-        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
-            with self.subTest(side, acct_mode=acct_mode):
-                self.setUp()
-                broker = self.create_broker(
-                    listener=self.broker_listener,
-                    data_handler=self.data_handler,
-                    acct_mode=acct_mode,
-                )
-                self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
-                self.data_handler.update_bars()
-
-                if side == OrderSide.BUY:
-                    broker.buy(symbol=SYMBOLS[0], order_type=OrderType.MARKET, sl=100.0)
-                else:
-                    broker.sell(
-                        symbol=SYMBOLS[0], order_type=OrderType.MARKET, sl=104.0
-                    )
-
-                if acct_mode == "netting":
-                    position = broker.get_position(SYMBOLS[0])
-                else:
-                    position = broker.get_position(
-                        self.broker_listener.fill_events[0].position_id
-                    )
-                sl_order = broker._order_manager.pending_orders[position.id].cover_order
-
-                self.assertEqual(position.units, sl_order.units)
-                self.assertEqual(sl_order.order_type, OrderType.STOP)
-
-    def test_buy_sell_mkt_sl_triggered(self):
+    def test_buy_sell_mkt_cover_sl_triggered(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
             with self.subTest(side, acct_mode=acct_mode):
                 self.setUp()
@@ -446,7 +416,7 @@ class TestSimBroker(unittest.TestCase):
                 self.assertIsNone(broker.get_position(SYMBOLS[0]))
                 self.assertEqual(broker.balance, 99_800.0)
 
-    def test_buy_sell_mkt_tp_triggered(self):
+    def test_buy_sell_mkt_cover_tp_triggered(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
             with self.subTest(side, acct_mode=acct_mode):
                 self.setUp()
@@ -454,6 +424,54 @@ class TestSimBroker(unittest.TestCase):
                     listener=self.broker_listener,
                     data_handler=self.data_handler,
                     acct_mode=acct_mode,
+                )
+                self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                self.data_handler.update_bars()
+
+                if side == "buy":
+                    broker.buy(symbol=SYMBOLS[0], order_type=OrderType.MARKET, tp=104.0)
+                else:
+                    broker.sell(
+                        symbol=SYMBOLS[0], order_type=OrderType.MARKET, tp=100.0
+                    )
+                self.data_handler.update_bars()
+
+                self.assertIsNone(broker.get_position(SYMBOLS[0]))
+                self.assertEqual(broker.balance, 100_200.0)
+
+    def test_buy_sell_pending_cover_sl_triggered_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                self.setUp()
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=self.data_handler,
+                    acct_mode=acct_mode,
+                    exec_price="next",
+                )
+                self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                self.data_handler.update_bars()
+
+                if side == "buy":
+                    broker.buy(symbol=SYMBOLS[0], order_type=OrderType.MARKET, sl=100.0)
+                else:
+                    broker.sell(
+                        symbol=SYMBOLS[0], order_type=OrderType.MARKET, sl=104.0
+                    )
+                self.data_handler.update_bars()
+
+                self.assertIsNone(broker.get_position(SYMBOLS[0]))
+                self.assertEqual(broker.balance, 99_800.0)
+
+    def test_buy_sell_pending_cover_tp_triggered_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                self.setUp()
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=self.data_handler,
+                    acct_mode=acct_mode,
+                    exec_price="next",
                 )
                 self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
                 self.data_handler.update_bars()

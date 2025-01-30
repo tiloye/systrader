@@ -273,7 +273,11 @@ class SimBroker(Broker, EventListener):
                 self.__submit(order)
                 executed_orders.append(order_id)
             elif isinstance(order, CoverOrder):
+                porder = order.primary_order
                 corder = order.cover_order
+
+                if porder and porder.order_type == OrderType.MARKET:
+                    self.__submit(porder)
                 execute_lmt_stp_order(corder)
                 executed_orders.append(order_id)
             else:

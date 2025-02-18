@@ -197,30 +197,31 @@ class TestOrderManager(unittest.TestCase):
                 with self.subTest(
                     msg=f"{acct_mode} account", side=side, sl_price=sl_price
                 ):
-                    order = self.order_manager.create_order(
+                    order_id = self.order_manager.create_order(
                         symbol=SYMBOL,
                         order_type=OrderType.MARKET,
                         side=side,
                         sl=sl_price,
                     )
-                    corder = self.order_manager.pending_orders[order.order_id]
+                    order = self.order_manager.pending_orders[order_id]
+                    porder = order.primary_order
+                    corder = order.cover_order
 
-                    self.assertIsInstance(corder, CoverOrder)
-                    self.assertIsNone(corder.primary_order)
-                    self.assertEqual(order.timestamp, corder.cover_order.timestamp)
-                    self.assertEqual(order.symbol, corder.cover_order.symbol)
-                    self.assertEqual(order.order_id, corder.cover_order.order_id)
-                    self.assertEqual(order.position_id, corder.cover_order.position_id)
-                    self.assertEqual(order.units, corder.cover_order.units)
-                    self.assertEqual(order.order_type, OrderType.MARKET)
-                    self.assertEqual(order.request, "open")
-                    self.assertEqual(corder.cover_order.request, "close")
-                    self.assertEqual(corder.cover_order.order_type, OrderType.STOP)
-                    self.assertEqual(corder.cover_order.price, sl_price)
-                    if order.side == OrderSide.BUY:
-                        self.assertEqual(corder.cover_order.side, OrderSide.SELL)
+                    self.assertIsInstance(order, CoverOrder)
+                    self.assertEqual(porder.timestamp, corder.timestamp)
+                    self.assertEqual(porder.symbol, corder.symbol)
+                    self.assertEqual(porder.order_id, corder.order_id)
+                    self.assertEqual(porder.position_id, corder.position_id)
+                    self.assertEqual(porder.units, corder.units)
+                    self.assertEqual(porder.order_type, OrderType.MARKET)
+                    self.assertEqual(porder.request, "open")
+                    self.assertEqual(corder.request, "close")
+                    self.assertEqual(corder.order_type, OrderType.STOP)
+                    self.assertEqual(corder.price, sl_price)
+                    if porder.side == OrderSide.BUY:
+                        self.assertEqual(corder.side, OrderSide.SELL)
                     else:
-                        self.assertEqual(corder.cover_order.side, OrderSide.BUY)
+                        self.assertEqual(corder.side, OrderSide.BUY)
             self.order_manager.reset()
 
     def test_create_lmt_cover_order_sl(self):
@@ -306,30 +307,37 @@ class TestOrderManager(unittest.TestCase):
                     self.setUp()
 
                     self.broker.acct_mode = acct_mode
-                    order = self.order_manager.create_order(
+                    order_id = self.order_manager.create_order(
                         symbol=SYMBOL,
                         order_type=OrderType.MARKET,
                         side=side,
                         tp=tp_price,
                     )
-                    corder = self.order_manager.pending_orders[order.order_id]
+                    order = self.order_manager.pending_orders[order_id]
 
-                    self.assertIsInstance(corder, CoverOrder)
-                    self.assertIsNone(corder.primary_order)
-                    self.assertEqual(order.timestamp, corder.cover_order.timestamp)
-                    self.assertEqual(order.symbol, corder.cover_order.symbol)
-                    self.assertEqual(order.order_id, corder.cover_order.order_id)
-                    self.assertEqual(order.position_id, corder.cover_order.position_id)
-                    self.assertEqual(order.units, corder.cover_order.units)
-                    self.assertEqual(order.order_type, OrderType.MARKET)
-                    self.assertEqual(order.request, "open")
-                    self.assertEqual(corder.cover_order.request, "close")
-                    self.assertEqual(corder.cover_order.order_type, OrderType.LIMIT)
-                    self.assertEqual(corder.cover_order.price, tp_price)
-                    if order.side == OrderSide.BUY:
-                        self.assertEqual(corder.cover_order.side, OrderSide.SELL)
+                    self.assertIsInstance(order, CoverOrder)
+                    self.assertEqual(
+                        order.primary_order.timestamp, order.cover_order.timestamp
+                    )
+                    self.assertEqual(
+                        order.primary_order.symbol, order.cover_order.symbol
+                    )
+                    self.assertEqual(
+                        order.primary_order.order_id, order.cover_order.order_id
+                    )
+                    self.assertEqual(
+                        order.primary_order.position_id, order.cover_order.position_id
+                    )
+                    self.assertEqual(order.primary_order.units, order.cover_order.units)
+                    self.assertEqual(order.primary_order.order_type, OrderType.MARKET)
+                    self.assertEqual(order.primary_order.request, "open")
+                    self.assertEqual(order.cover_order.request, "close")
+                    self.assertEqual(order.cover_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(order.cover_order.price, tp_price)
+                    if order.primary_order.side == OrderSide.BUY:
+                        self.assertEqual(order.cover_order.side, OrderSide.SELL)
                     else:
-                        self.assertEqual(corder.cover_order.side, OrderSide.BUY)
+                        self.assertEqual(order.cover_order.side, OrderSide.BUY)
 
     def test_create_lmt_cover_order_tp(self):
         for acct_mode in ["netting", "hedging"]:

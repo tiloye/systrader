@@ -435,10 +435,8 @@ class OrderManager:
                 self.pending_orders[corder.id] = corder
                 return corder.id
             else:
-                # Primary orders with value None are assumed to have been executed
-                corder = corder._replace(primary_order=None)
                 self.pending_orders[corder.id] = corder
-                return order
+                return corder.id
         else:  # lmt or stp order
             self.pending_orders[corder.id] = corder
             return corder.id

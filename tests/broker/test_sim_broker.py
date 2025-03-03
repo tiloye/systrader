@@ -496,6 +496,7 @@ class TestSimBroker(unittest.TestCase):
                     data_handler=self.data_handler,
                     acct_mode=acct_mode,
                 )
+                self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
                 self.data_handler.update_bars()
 
                 if side == OrderSide.BUY:
@@ -508,10 +509,15 @@ class TestSimBroker(unittest.TestCase):
                     )
                 self.data_handler.update_bars()
 
-                # order = broker.get_order_history()[0]
-                # position = broker.get_position(
-                #     SYMBOLS[0] if acct_mode == "netting" else order.id
-                # )
+                order = broker._order_manager.history[-1]
+                pending_order = broker._order_manager.pending_orders.get(order.order_id)
+                position = broker.get_position(
+                    SYMBOLS[0] if acct_mode == "netting" else order.order_id
+                )
+
+                self.assertEqual(order.status, OrderStatus.EXECUTED)
+                self.assertEqual(order.order_id, position.id)
+                self.assertIsNone(pending_order)
 
     def test_buy_sell_lmt_cover_sl_triggered_on_same_bar(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):

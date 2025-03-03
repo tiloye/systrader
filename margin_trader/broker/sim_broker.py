@@ -6,7 +6,12 @@ import pandas as pd
 
 from margin_trader.broker.broker import Broker
 from margin_trader.broker.fill import Fill
-from margin_trader.broker.order import CoverOrder, Order, OrderManager, ReverseOrder
+from margin_trader.broker.order import (
+    CoverOrder,
+    Order,
+    OrderManager,
+    ReverseOrder,
+)
 from margin_trader.broker.position import (
     HedgePositionManager,
     NetPositionManager,
@@ -24,8 +29,7 @@ class SimBroker(Broker, EventListener):
     """Simulate live trading on a broker account.
 
     This class simplifies trading by automatically converting order objects to fill
-    objects without latency, slippage, or fill ratio issues. It can only handle market
-    orders.
+    objects without latency, slippage, or fill ratio issues.
 
     Parameters
     ----------
@@ -340,12 +344,10 @@ class SimBroker(Broker, EventListener):
                     position_id=order.position_id,
                 )
                 order.execute()
-                self._order_manager.history.append(order)
                 self.update_account(fill_event)
                 self.event_manager.notify(FILLEVENT, fill_event)
             else:
                 order.reject()
-                self._order_manager.history.append(order)
                 self.event_manager.notify(ORDEREVENT, order)
 
         else:  # Close an existing position
@@ -361,7 +363,6 @@ class SimBroker(Broker, EventListener):
                 order.position_id,
             )
             order.execute()
-            self._order_manager.history.append(order)
             self.update_account(fill_event)
             self.event_manager.notify(FILLEVENT, fill_event)
 

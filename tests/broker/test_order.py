@@ -129,6 +129,7 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(order.position_id, 1)
                     self.assertEqual(order.side, side)
                     self.assertEqual(order.units, 100)
+                    self.assertIn(order, self.order_manager.history)
 
     def test_create_lmt_order(self):
         for acct_mode in ["netting", "hedging"]:
@@ -148,6 +149,7 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(order.side, side)
                     self.assertEqual(order.price, price)
                     self.assertEqual(order.order_id, 1)
+                    self.assertIn(order, self.order_manager.history)
 
     def test_create_stp_order(self):
         for acct_mode in ["netting", "hedging"]:
@@ -167,6 +169,7 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(order.side, side)
                     self.assertEqual(order.price, price)
                     self.assertEqual(order.order_id, 1)
+                    self.assertIn(order, self.order_manager.history)
 
     def test_create_pending_mkt_order(self):
         # When broker account is set to execute trades at next available price, then
@@ -188,6 +191,7 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(order.position_id, id_)
                     self.assertEqual(order.side, side)
                     self.assertEqual(order.units, 100)
+                    self.assertIn(order, self.order_manager.history)
             self.order_manager.reset()
 
     def test_create_mkt_cover_order_sl(self):
@@ -218,6 +222,8 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(corder.request, "close")
                     self.assertEqual(corder.order_type, OrderType.STOP)
                     self.assertEqual(corder.price, sl_price)
+                    self.assertIn(porder, self.order_manager.history)
+                    self.assertIn(corder, self.order_manager.history)
                     if porder.side == OrderSide.BUY:
                         self.assertEqual(corder.side, OrderSide.SELL)
                     else:
@@ -256,6 +262,8 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(sl_order.request, "close")
                     self.assertEqual(sl_order.order_type, OrderType.STOP)
                     self.assertEqual(sl_order.price, sl_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(sl_order, self.order_manager.history)
                     if p_order.side == OrderSide.BUY:
                         self.assertEqual(sl_order.side, OrderSide.SELL)
                     else:
@@ -293,6 +301,8 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(sl_order.request, "close")
                     self.assertEqual(sl_order.order_type, OrderType.STOP)
                     self.assertEqual(sl_order.price, sl_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(sl_order, self.order_manager.history)
                     if p_order.side == OrderSide.BUY:
                         self.assertEqual(sl_order.side, OrderSide.SELL)
                     else:
@@ -314,30 +324,26 @@ class TestOrderManager(unittest.TestCase):
                         tp=tp_price,
                     )
                     order = self.order_manager.pending_orders[order_id]
+                    p_order = order.primary_order
+                    tp_order = order.cover_order
 
                     self.assertIsInstance(order, CoverOrder)
-                    self.assertEqual(
-                        order.primary_order.timestamp, order.cover_order.timestamp
-                    )
-                    self.assertEqual(
-                        order.primary_order.symbol, order.cover_order.symbol
-                    )
-                    self.assertEqual(
-                        order.primary_order.order_id, order.cover_order.order_id
-                    )
-                    self.assertEqual(
-                        order.primary_order.position_id, order.cover_order.position_id
-                    )
-                    self.assertEqual(order.primary_order.units, order.cover_order.units)
-                    self.assertEqual(order.primary_order.order_type, OrderType.MARKET)
-                    self.assertEqual(order.primary_order.request, "open")
-                    self.assertEqual(order.cover_order.request, "close")
-                    self.assertEqual(order.cover_order.order_type, OrderType.LIMIT)
-                    self.assertEqual(order.cover_order.price, tp_price)
-                    if order.primary_order.side == OrderSide.BUY:
-                        self.assertEqual(order.cover_order.side, OrderSide.SELL)
+                    self.assertEqual(p_order.timestamp, tp_order.timestamp)
+                    self.assertEqual(p_order.symbol, tp_order.symbol)
+                    self.assertEqual(p_order.order_id, tp_order.order_id)
+                    self.assertEqual(p_order.position_id, tp_order.position_id)
+                    self.assertEqual(p_order.units, tp_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.MARKET)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(tp_order.request, "close")
+                    self.assertEqual(tp_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(tp_order.price, tp_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(tp_order, self.order_manager.history)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(tp_order.side, OrderSide.SELL)
                     else:
-                        self.assertEqual(order.cover_order.side, OrderSide.BUY)
+                        self.assertEqual(tp_order.side, OrderSide.BUY)
 
     def test_create_lmt_cover_order_tp(self):
         for acct_mode in ["netting", "hedging"]:
@@ -371,6 +377,8 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(tp_order.request, "close")
                     self.assertEqual(tp_order.order_type, OrderType.LIMIT)
                     self.assertEqual(tp_order.price, tp_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(tp_order, self.order_manager.history)
                     if p_order.side == OrderSide.BUY:
                         self.assertEqual(tp_order.side, OrderSide.SELL)
                     else:
@@ -408,6 +416,8 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(tp_order.request, "close")
                     self.assertEqual(tp_order.order_type, OrderType.LIMIT)
                     self.assertEqual(tp_order.price, tp_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(tp_order, self.order_manager.history)
                     if p_order.side == OrderSide.BUY:
                         self.assertEqual(tp_order.side, OrderSide.SELL)
                     else:
@@ -430,24 +440,26 @@ class TestOrderManager(unittest.TestCase):
                         sl=sl_price,
                     )
                     corder = self.order_manager.pending_orders[order_id]
-                    primary_order = corder.primary_order
-                    cover_order = corder.cover_order
+                    p_order = corder.primary_order
+                    sl_order = corder.cover_order
 
                     self.assertIsInstance(corder, CoverOrder)
-                    self.assertEqual(primary_order.timestamp, cover_order.timestamp)
-                    self.assertEqual(primary_order.symbol, cover_order.symbol)
-                    self.assertEqual(primary_order.order_id, cover_order.order_id)
-                    self.assertEqual(primary_order.position_id, cover_order.position_id)
-                    self.assertEqual(primary_order.units, cover_order.units)
-                    self.assertEqual(primary_order.order_type, OrderType.MARKET)
-                    self.assertEqual(primary_order.request, "open")
-                    self.assertEqual(cover_order.request, "close")
-                    self.assertEqual(cover_order.order_type, OrderType.STOP)
-                    self.assertEqual(cover_order.price, sl_price)
-                    if primary_order.side == OrderSide.BUY:
-                        self.assertEqual(cover_order.side, OrderSide.SELL)
+                    self.assertEqual(p_order.timestamp, sl_order.timestamp)
+                    self.assertEqual(p_order.symbol, sl_order.symbol)
+                    self.assertEqual(p_order.order_id, sl_order.order_id)
+                    self.assertEqual(p_order.position_id, sl_order.position_id)
+                    self.assertEqual(p_order.units, sl_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.MARKET)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(sl_order.request, "close")
+                    self.assertEqual(sl_order.order_type, OrderType.STOP)
+                    self.assertEqual(sl_order.price, sl_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(sl_order, self.order_manager.history)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(sl_order.side, OrderSide.SELL)
                     else:
-                        self.assertEqual(cover_order.side, OrderSide.BUY)
+                        self.assertEqual(sl_order.side, OrderSide.BUY)
 
     def test_create_pending_mkt_cover_order_tp(self):
         self.broker._exec_price = "next"
@@ -464,24 +476,26 @@ class TestOrderManager(unittest.TestCase):
                         tp=tp_price,
                     )
                     corder = self.order_manager.pending_orders[order_id]
-                    primary_order = corder.primary_order
-                    cover_order = corder.cover_order
+                    p_order = corder.primary_order
+                    tp_order = corder.cover_order
 
                     self.assertIsInstance(corder, CoverOrder)
-                    self.assertEqual(primary_order.timestamp, cover_order.timestamp)
-                    self.assertEqual(primary_order.symbol, cover_order.symbol)
-                    self.assertEqual(primary_order.order_id, cover_order.order_id)
-                    self.assertEqual(primary_order.position_id, cover_order.position_id)
-                    self.assertEqual(primary_order.units, cover_order.units)
-                    self.assertEqual(primary_order.order_type, OrderType.MARKET)
-                    self.assertEqual(primary_order.request, "open")
-                    self.assertEqual(cover_order.request, "close")
-                    self.assertEqual(cover_order.order_type, OrderType.LIMIT)
-                    self.assertEqual(cover_order.price, tp_price)
-                    if primary_order.side == OrderSide.BUY:
-                        self.assertEqual(cover_order.side, OrderSide.SELL)
+                    self.assertEqual(p_order.timestamp, tp_order.timestamp)
+                    self.assertEqual(p_order.symbol, tp_order.symbol)
+                    self.assertEqual(p_order.order_id, tp_order.order_id)
+                    self.assertEqual(p_order.position_id, tp_order.position_id)
+                    self.assertEqual(p_order.units, tp_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.MARKET)
+                    self.assertEqual(p_order.request, "open")
+                    self.assertEqual(tp_order.request, "close")
+                    self.assertEqual(tp_order.order_type, OrderType.LIMIT)
+                    self.assertEqual(tp_order.price, tp_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(tp_order, self.order_manager.history)
+                    if p_order.side == OrderSide.BUY:
+                        self.assertEqual(tp_order.side, OrderSide.SELL)
                     else:
-                        self.assertEqual(cover_order.side, OrderSide.BUY)
+                        self.assertEqual(tp_order.side, OrderSide.BUY)
             self.order_manager.reset()
 
     def test_create_mkt_bracket_order(self):
@@ -497,33 +511,39 @@ class TestOrderManager(unittest.TestCase):
                 ):
                     self.setUp()
                     self.broker.acct_mode = acct_mode
-                    order = self.order_manager.create_order(
+                    order_id = self.order_manager.create_order(
                         symbol=SYMBOL,
                         order_type=OrderType.MARKET,
                         side=side,
                         tp=tp_price,
                         sl=sl_price,
                     )
-                    border = self.order_manager.pending_orders[order.order_id]
+                    border = self.order_manager.pending_orders[order_id]
+                    p_order = border.primary_order
                     sl_order = border.stop_order
                     tp_order = border.limit_order
 
                     self.assertIsInstance(border, BracketOrder)
-                    self.assertEqual(border.primary_order, None)
-                    self.assertEqual(order.order_id, border.id)
-                    self.assertEqual(order.symbol, sl_order.symbol)
-                    self.assertEqual(order.symbol, tp_order.symbol)
-                    self.assertEqual(order.units, sl_order.units)
-                    self.assertEqual(order.units, tp_order.units)
-                    self.assertEqual(order.order_type, OrderType.MARKET)
-                    self.assertEqual(order.request, "open")
+                    self.assertEqual(p_order.order_id, border.id)
+                    self.assertEqual(p_order.order_id, sl_order.order_id)
+                    self.assertEqual(p_order.order_id, tp_order.order_id)
+                    self.assertEqual(p_order.symbol, sl_order.symbol)
+                    self.assertEqual(p_order.symbol, tp_order.symbol)
+                    self.assertEqual(p_order.units, sl_order.units)
+                    self.assertEqual(p_order.units, tp_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.MARKET)
+                    self.assertEqual(p_order.request, "open")
                     self.assertEqual(sl_order.request, "close")
                     self.assertEqual(tp_order.request, "close")
                     self.assertEqual(sl_order.order_type, OrderType.STOP)
                     self.assertEqual(tp_order.order_type, OrderType.LIMIT)
                     self.assertEqual(sl_order.price, sl_price)
                     self.assertEqual(tp_order.price, tp_price)
-                    if order.side == OrderSide.BUY:
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(sl_order, self.order_manager.history)
+                    self.assertIn(tp_order, self.order_manager.history)
+                    self.assertIn
+                    if p_order.side == OrderSide.BUY:
                         self.assertEqual(sl_order.side, OrderSide.SELL)
                         self.assertEqual(tp_order.side, OrderSide.SELL)
                     else:
@@ -551,25 +571,30 @@ class TestOrderManager(unittest.TestCase):
                         sl=sl_price,
                     )
                     border = self.order_manager.pending_orders[order_id]
-                    primary_order = border.primary_order
+                    p_order = border.primary_order
                     sl_order = border.stop_order
                     tp_order = border.limit_order
 
                     self.assertIsInstance(border, BracketOrder)
-                    self.assertEqual(primary_order.order_id, border.id)
-                    self.assertEqual(primary_order.symbol, sl_order.symbol)
-                    self.assertEqual(primary_order.symbol, tp_order.symbol)
-                    self.assertEqual(primary_order.units, sl_order.units)
-                    self.assertEqual(primary_order.units, tp_order.units)
-                    self.assertEqual(primary_order.order_type, OrderType.MARKET)
-                    self.assertEqual(primary_order.request, "open")
+                    self.assertEqual(p_order.order_id, border.id)
+                    self.assertEqual(p_order.order_id, sl_order.order_id)
+                    self.assertEqual(p_order.order_id, tp_order.order_id)
+                    self.assertEqual(p_order.symbol, sl_order.symbol)
+                    self.assertEqual(p_order.symbol, tp_order.symbol)
+                    self.assertEqual(p_order.units, sl_order.units)
+                    self.assertEqual(p_order.units, tp_order.units)
+                    self.assertEqual(p_order.order_type, OrderType.MARKET)
+                    self.assertEqual(p_order.request, "open")
                     self.assertEqual(sl_order.request, "close")
                     self.assertEqual(tp_order.request, "close")
                     self.assertEqual(sl_order.order_type, OrderType.STOP)
                     self.assertEqual(tp_order.order_type, OrderType.LIMIT)
                     self.assertEqual(sl_order.price, sl_price)
                     self.assertEqual(tp_order.price, tp_price)
-                    if primary_order.side == OrderSide.BUY:
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(sl_order, self.order_manager.history)
+                    self.assertIn(tp_order, self.order_manager.history)
+                    if p_order.side == OrderSide.BUY:
                         self.assertEqual(sl_order.side, OrderSide.SELL)
                         self.assertEqual(tp_order.side, OrderSide.SELL)
                     else:
@@ -605,9 +630,9 @@ class TestOrderManager(unittest.TestCase):
                     tp_order = border.limit_order
 
                     self.assertIsInstance(border, BracketOrder)
-                    self.assertIsNotNone(p_order)
-                    self.assertEqual(border.id, 1)
-                    self.assertEqual(p_order.order_id, 1)
+                    self.assertEqual(p_order.order_id, border.id)
+                    self.assertEqual(p_order.order_id, sl_order.order_id)
+                    self.assertEqual(p_order.order_id, tp_order.order_id)
                     self.assertEqual(p_order.symbol, sl_order.symbol)
                     self.assertEqual(p_order.symbol, tp_order.symbol)
                     self.assertEqual(p_order.units, sl_order.units)
@@ -620,6 +645,9 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(tp_order.order_type, OrderType.LIMIT)
                     self.assertEqual(sl_order.price, sl_price)
                     self.assertEqual(tp_order.price, tp_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(sl_order, self.order_manager.history)
+                    self.assertIn(tp_order, self.order_manager.history)
                     if p_order.side == OrderSide.BUY:
                         self.assertEqual(sl_order.side, OrderSide.SELL)
                         self.assertEqual(tp_order.side, OrderSide.SELL)
@@ -655,9 +683,9 @@ class TestOrderManager(unittest.TestCase):
                     tp_order = border.limit_order
 
                     self.assertIsInstance(border, BracketOrder)
-                    self.assertIsNotNone(p_order)
-                    self.assertEqual(border.id, 1)
-                    self.assertEqual(p_order.order_id, 1)
+                    self.assertEqual(p_order.order_id, border.id)
+                    self.assertEqual(p_order.order_id, sl_order.order_id)
+                    self.assertEqual(p_order.order_id, tp_order.order_id)
                     self.assertEqual(p_order.symbol, sl_order.symbol)
                     self.assertEqual(p_order.symbol, tp_order.symbol)
                     self.assertEqual(p_order.units, sl_order.units)
@@ -670,6 +698,9 @@ class TestOrderManager(unittest.TestCase):
                     self.assertEqual(tp_order.order_type, OrderType.LIMIT)
                     self.assertEqual(sl_order.price, sl_price)
                     self.assertEqual(tp_order.price, tp_price)
+                    self.assertIn(p_order, self.order_manager.history)
+                    self.assertIn(sl_order, self.order_manager.history)
+                    self.assertIn(tp_order, self.order_manager.history)
                     if p_order.side == OrderSide.BUY:
                         self.assertEqual(sl_order.side, OrderSide.SELL)
                         self.assertEqual(tp_order.side, OrderSide.SELL)
@@ -736,6 +767,8 @@ class TestOrderManager(unittest.TestCase):
                         self.assertEqual(close_order.units, position.units)
                         self.assertEqual(open_order.side, reverse_side)
                         self.assertEqual(close_order.side, reverse_side)
+                        self.assertIn(open_order, self.order_manager.history)
+                        self.assertIn(close_order, self.order_manager.history)
                     self.order_manager.reset()
 
     def test_net_acct_full_partial_close_order(self):

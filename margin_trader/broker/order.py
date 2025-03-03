@@ -370,6 +370,9 @@ class OrderManager:
         order2.units = order.units - position.units
         order2.request = "open"
 
+        self.history.append(order1)
+        self.history.append(order2)
+
         rorder = ReverseOrder(order1, order2, order.order_id)
         if order.order_type == OrderType.MARKET and self.broker._exec_price == "next":
             self.pending_orders[rorder.id] = rorder
@@ -415,42 +418,32 @@ class OrderManager:
 
     def __create_bracket_order(self, order: Order) -> Order | int:
         border = self.__get_bracket_orders(order)
-        if border.primary_order.order_type == OrderType.MARKET:
-            if self.broker._exec_price == "next":
-                self.pending_orders[border.id] = border
-                return border.id
-            else:
-                # Primary orders with value None are assumed to have been executed
-                border = border._replace(primary_order=None)
-                self.pending_orders[border.id] = border
-                return order
-        else:  # lmt or stp order
-            self.pending_orders[border.id] = border
-            return border.id
+        self.pending_orders[border.id] = border
+        self.history.append(border.primary_order)
+        self.history.append(border.stop_order)
+        self.history.append(border.limit_order)
+        return border.id
 
     def __create_cover_order(self, order: Order) -> Order | int:
         corder = self.__get_cover_order(order, sl=True if order.sl else False)
-        if corder.primary_order.order_type == OrderType.MARKET:
-            if self.broker._exec_price == "next":
-                self.pending_orders[corder.id] = corder
-                return corder.id
-            else:
-                self.pending_orders[corder.id] = corder
-                return corder.id
-        else:  # lmt or stp order
-            self.pending_orders[corder.id] = corder
-            return corder.id
+        self.pending_orders[corder.id] = corder
+        self.history.append(corder.primary_order)
+        self.history.append(corder.cover_order)
+        return corder.id
 
     def __create_regular_order(self, order: Order) -> Order | int:
         # Create orders without bracket or cover orders
         if order.order_type == OrderType.MARKET:
             if self.broker._exec_price == "next":
                 self.pending_orders[order.order_id] = order
+                self.history.append(order)
                 return order.order_id
             else:
+                self.history.append(order)
                 return order
         else:
             self.pending_orders[order.order_id] = order
+            self.history.append(order)
             return order.order_id
 
     def __get_bracket_orders(self, order: Order) -> BracketOrder:

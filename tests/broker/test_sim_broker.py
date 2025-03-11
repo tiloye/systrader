@@ -510,14 +510,19 @@ class TestSimBroker(unittest.TestCase):
                 self.data_handler.update_bars()
 
                 order = broker._order_manager.history[-1]
-                pending_order = broker._order_manager.pending_orders.get(order.order_id)
+                pending_orders = broker._order_manager.pending_orders
                 position = broker.get_position(
                     SYMBOLS[0] if acct_mode == "netting" else order.order_id
                 )
 
                 self.assertEqual(order.status, OrderStatus.EXECUTED)
                 self.assertEqual(order.order_id, position.id)
-                self.assertIsNone(pending_order)
+                self.assertNotIn(order, pending_orders)
+                self.assertEqual(broker.balance, 100_000)
+                if side == OrderSide.BUY:
+                    self.assertEqual(broker.equity, 100_500)
+                else:
+                    self.assertEqual(broker.equity, 99_700)
 
     def test_buy_sell_lmt_cover_sl_triggered_on_same_bar(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
@@ -645,6 +650,43 @@ class TestSimBroker(unittest.TestCase):
 
                 self.assertIsNone(broker.get_position(SYMBOLS[0]))
                 self.assertEqual(broker.balance, 100_140.0)
+
+    def test_buy_sell_stp_order_execution(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                self.setUp()
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=self.data_handler,
+                    acct_mode=acct_mode,
+                )
+                self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                self.data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=SYMBOLS[0], order_type=OrderType.STOP, price=103.0
+                    )
+                else:
+                    broker.sell(
+                        symbol=SYMBOLS[0], order_type=OrderType.STOP, price=101.0
+                    )
+                self.data_handler.update_bars()
+
+                order = broker._order_manager.history[-1]
+                pending_orders = broker._order_manager.pending_orders
+                position = broker.get_position(
+                    SYMBOLS[0] if acct_mode == "netting" else order.order_id
+                )
+
+                self.assertEqual(order.status, OrderStatus.EXECUTED)
+                self.assertEqual(order.order_id, position.id)
+                self.assertNotIn(order, pending_orders)
+                self.assertEqual(broker.balance, 100_000)
+                if side == OrderSide.BUY:
+                    self.assertEqual(broker.equity, 100_300)
+                else:
+                    self.assertEqual(broker.equity, 99_500)
 
     def test_account_history_update(self):
         broker = self.create_broker(

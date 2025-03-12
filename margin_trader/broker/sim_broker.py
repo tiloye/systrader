@@ -7,6 +7,7 @@ import pandas as pd
 from margin_trader.broker.broker import Broker
 from margin_trader.broker.fill import Fill
 from margin_trader.broker.order import (
+    BracketOrder,
     CoverOrder,
     Order,
     OrderManager,
@@ -244,7 +245,7 @@ class SimBroker(Broker, EventListener):
             self.execute_order(order.open_order)
         else:  # Pending order
             _order = self._order_manager.pending_orders[order]
-            if isinstance(_order, CoverOrder):
+            if isinstance(_order, (CoverOrder, BracketOrder)):
                 if (
                     _order.primary_order.order_type == OrderType.MARKET
                     and self._exec_price != "next"
@@ -256,8 +257,6 @@ class SimBroker(Broker, EventListener):
     def __submit_pending_orders(self) -> None:
         """Executes pending orders. Called when new market data is received."""
         executed_orders = []
-
-        # TODO: Add execution logic for Cover or Bracket orders that have pending order
 
         for order_id in self._order_manager.pending_orders:
             order = self._order_manager.pending_orders[order_id]
@@ -275,9 +274,8 @@ class SimBroker(Broker, EventListener):
             elif isinstance(order, ReverseOrder):
                 self.__submit(order)
                 executed_orders.append(order_id)
-            elif isinstance(order, CoverOrder):
+            elif isinstance(order, (CoverOrder, BracketOrder)):
                 porder = order.primary_order
-                corder = order.cover_order
                 if (
                     porder.order_type == OrderType.MARKET
                     and porder.status == OrderStatus.PENDING
@@ -288,8 +286,26 @@ class SimBroker(Broker, EventListener):
                     or porder.order_type == OrderType.STOP
                 ):
                     self.execute_lmt_stp_order(porder)
-                self.execute_lmt_stp_order(corder)
-                executed_orders.append(order_id)
+
+                # self.execute_lmt_stp_order(
+                #     order.cover_order
+                #     if isinstance(order, CoverOrder)
+                #     else order.stop_order
+                # )
+
+                if isinstance(order, CoverOrder):
+                    self.execute_lmt_stp_order(order.cover_order)
+                    if order.cover_order.status == OrderStatus.EXECUTED:
+                        executed_orders.append(order_id)
+                elif isinstance(order, BracketOrder):
+                    self.execute_lmt_stp_order(order.stop_order)
+                    if order.stop_order.status == OrderStatus.PENDING:
+                        self.execute_lmt_stp_order(order.limit_order)
+                    if (
+                        order.stop_order.status == OrderStatus.EXECUTED
+                        or order.limit_order.status == OrderStatus.EXECUTED
+                    ):
+                        executed_orders.append(order_id)
 
         for order_id in executed_orders:
             del self._order_manager.pending_orders[order_id]

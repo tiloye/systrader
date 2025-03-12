@@ -439,6 +439,174 @@ class TestSimBroker(unittest.TestCase):
                 self.assertIsNone(broker.get_position(SYMBOLS[0]))
                 self.assertEqual(broker.balance, 100_200.0)
 
+    def test_buy_sell_mkt_bracket_order_triggers_sl(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                self.setUp()
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=self.data_handler,
+                    acct_mode=acct_mode,
+                )
+                self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                self.data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=SYMBOLS[0],
+                        order_type=OrderType.MARKET,
+                        sl=101.0,
+                        tp=103.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=SYMBOLS[0],
+                        order_type=OrderType.MARKET,
+                        sl=103.0,
+                        tp=101.0,
+                    )
+                self.data_handler.update_bars()
+
+                self.assertIsNone(broker.get_position(SYMBOLS[0]))
+                self.assertEqual(broker.balance, 99_900.0)
+
+    def test_buy_sell_mkt_bracket_order_triggers_sl_on_future_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                data_event_manager = EventManager()
+                data_handler = HistoricCSVDataHandler(
+                    csv_dir=CSV_DIR, symbols=["SYMBOL3"]
+                )
+                data_handler.add_event_manager(data_event_manager)
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=data_handler,
+                    acct_mode=acct_mode,
+                )
+                data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=98.0,
+                        tp=106.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=106.0,
+                        tp=98.0,
+                    )
+
+                data_handler.update_bars()
+                self.assertIn(
+                    "SYMBOL3" if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_000.0)
+                self.assertEqual(
+                    broker.equity, 100_100.0 if side == OrderSide.BUY else 99_900.0
+                )
+
+                data_handler.update_bars()
+                self.assertNotIn(
+                    "SYMBOL3" if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 99_600.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_mkt_bracket_order_triggers_tp(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                data_event_manager = EventManager()
+                data_handler = HistoricCSVDataHandler(
+                    csv_dir=CSV_DIR, symbols=["SYMBOL3"]
+                )
+                data_handler.add_event_manager(data_event_manager)
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=data_handler,
+                    acct_mode=acct_mode,
+                )
+                data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=99.0,
+                        tp=104.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=105.0,
+                        tp=100.0,
+                    )
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    "SYMBOL3" if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_200.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_mkt_bracket_order_triggers_tp_on_future_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                data_event_manager = EventManager()
+                data_handler = HistoricCSVDataHandler(
+                    csv_dir=CSV_DIR, symbols=["SYMBOL3"]
+                )
+                data_handler.add_event_manager(data_event_manager)
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=data_handler,
+                    acct_mode=acct_mode,
+                )
+                data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=97.0,
+                        tp=106.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=107.0,
+                        tp=98.0,
+                    )
+
+                data_handler.update_bars()
+                self.assertIn(
+                    "SYMBOL3" if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_000.0)
+                self.assertEqual(
+                    broker.equity, 100_100.0 if side == OrderSide.BUY else 99_900.0
+                )
+
+                data_handler.update_bars()
+                self.assertNotIn(
+                    "SYMBOL3" if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_400.0)
+                self.assertEqual(broker.equity, broker.balance)
+
     def test_buy_sell_pending_mkt_order_cover_sl_triggered_on_same_bar(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
             with self.subTest(side, acct_mode=acct_mode):
@@ -486,6 +654,162 @@ class TestSimBroker(unittest.TestCase):
 
                 self.assertIsNone(broker.get_position(SYMBOLS[0]))
                 self.assertEqual(broker.balance, 100_200.0)
+
+    def test_buy_sell_pending_mkt_bracket_order_triggers_sl_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                self.setUp()
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=self.data_handler,
+                    acct_mode=acct_mode,
+                    exec_price="next",
+                )
+                self.data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                self.data_handler.update_bars()
+
+                if side == "buy":
+                    broker.buy(
+                        symbol=SYMBOLS[0],
+                        order_type=OrderType.MARKET,
+                        sl=101.0,
+                        tp=103.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=SYMBOLS[0],
+                        order_type=OrderType.MARKET,
+                        sl=103.0,
+                        tp=101.0,
+                    )
+                self.data_handler.update_bars()
+
+                self.assertIsNone(broker.get_position(SYMBOLS[0]))
+                self.assertEqual(broker.balance, 99_900.0)
+
+    def test_buy_sell_pending_mkt_bracket_order_triggers_sl_on_future_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                data_event_manager = EventManager()
+                data_handler = HistoricCSVDataHandler(
+                    csv_dir=CSV_DIR, symbols=["SYMBOL3"]
+                )
+                data_handler.add_event_manager(data_event_manager)
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=data_handler,
+                    acct_mode=acct_mode,
+                    exec_price="next",
+                )
+                data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=97.0,
+                        tp=107.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=107.0,
+                        tp=97.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    "SYMBOL3" if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 99_500.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_pending_mkt_bracket_order_triggers_tp_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                data_event_manager = EventManager()
+                data_handler = HistoricCSVDataHandler(
+                    csv_dir=CSV_DIR, symbols=["SYMBOL3"]
+                )
+                data_handler.add_event_manager(data_event_manager)
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=data_handler,
+                    acct_mode=acct_mode,
+                    exec_price="next",
+                )
+                data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=99.0,
+                        tp=104.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=105.0,
+                        tp=100.0,
+                    )
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    "SYMBOL3" if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_200.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_pending_mkt_bracket_order_triggers_tp_on_future_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                data_event_manager = EventManager()
+                data_handler = HistoricCSVDataHandler(
+                    csv_dir=CSV_DIR, symbols=["SYMBOL3"]
+                )
+                data_handler.add_event_manager(data_event_manager)
+                broker = self.create_broker(
+                    listener=self.broker_listener,
+                    data_handler=data_handler,
+                    acct_mode=acct_mode,
+                    exec_price="next",
+                )
+                data_handler.event_manager.subscribe(MARKETEVENT, broker)
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=96.0,
+                        tp=107.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol="SYMBOL3",
+                        order_type=OrderType.MARKET,
+                        sl=109.0,
+                        tp=97.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    "SYMBOL3" if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_500.0)
+                self.assertEqual(broker.equity, broker.balance)
 
     def test_buy_sell_lmt_order_execution(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):

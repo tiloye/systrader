@@ -1044,6 +1044,290 @@ class TestSimBroker(unittest.TestCase):
                 else:
                     self.assertEqual(broker.equity, 99_500)
 
+    def test_buy_sell_stp_cover_sl_triggered_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL1"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=103.0,
+                        sl=100.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=101.0,
+                        sl=104.0,
+                    )
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 99_700.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_stp_cover_sl_triggered_on_next_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL3"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=103.0,
+                        sl=98.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=101.0,
+                        sl=106.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 99_500.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_stp_cover_tp_triggered_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL1"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == "buy":
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=103.0,
+                        tp=104.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=101.0,
+                        tp=100.0,
+                    )
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_100.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_stp_cover_tp_triggered_on_next_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL3"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=103.0,
+                        tp=106.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=101.0,
+                        tp=98.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_300.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_stp_bracket_sl_triggered_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL1"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=103.0,
+                        sl=100.0,
+                        tp=104.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=101.0,
+                        sl=104.0,
+                        tp=100.0,
+                    )
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 99_700.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_stp_bracket_sl_triggered_on_next_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL3"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=103.0,
+                        sl=98.0,
+                        tp=106.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=101.0,
+                        sl=106.0,
+                        tp=98.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 99_500.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_stp_bracket_tp_triggered_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL3"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=103.0,
+                        sl=99.0,
+                        tp=104.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=101.0,
+                        sl=105.0,
+                        tp=100.0,
+                    )
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_100.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_stp_bracket_tp_triggered_on_next_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL3"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=103.0,
+                        sl=97.0,
+                        tp=106.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.STOP,
+                        price=101.0,
+                        sl=107.0,
+                        tp=98.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_300.0)
+                self.assertEqual(broker.equity, broker.balance)
+
     def test_account_history_update(self):
         for acct_mode in ["netting", "hedging"]:
             with self.subTest(acct_mode=acct_mode):

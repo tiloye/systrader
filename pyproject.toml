@@ -18,6 +18,7 @@ yfinance = "^0.2.40"
 mypy = "^1.10.0"
 ruff = "^0.4.8"
 pre-commit = "^3.7.1"
+ipykernel = "^6.29.5"
 
 
 [tool.mypy]

@@ -760,11 +760,12 @@ class TestSimBroker(unittest.TestCase):
                     broker._p_manager.positions,
                 )
                 self.assertEqual(broker.balance, 99_900.0)
+                self.assertEqual(broker.equity, broker.balance)
 
     def test_buy_sell_lmt_cover_sl_triggered_on_next_bar(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
             with self.subTest(side, acct_mode=acct_mode):
-                symbol = "SYMBOL1"
+                symbol = "SYMBOL3"
                 data_handler_arg = {"symbol": symbol}
                 broker_args = {"acct_mode": acct_mode}
                 data_handler, broker = self.setup_data_handler_and_broker(
@@ -777,22 +778,24 @@ class TestSimBroker(unittest.TestCase):
                         symbol=symbol,
                         order_type=OrderType.LIMIT,
                         price=101.0,
-                        sl=100.0,
+                        sl=98.0,
                     )
                 else:
                     broker.sell(
                         symbol=symbol,
                         order_type=OrderType.LIMIT,
                         price=103.0,
-                        sl=104.0,
+                        sl=106.0,
                     )
+                data_handler.update_bars()
                 data_handler.update_bars()
 
                 self.assertNotIn(
                     symbol if acct_mode == "netting" else 1,
                     broker._p_manager.positions,
                 )
-                self.assertEqual(broker.balance, 99_900.0)
+                self.assertEqual(broker.balance, 99_700.0)
+                self.assertEqual(broker.equity, broker.balance)
 
     def test_buy_sell_lmt_cover_tp_triggered_on_same_bar(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
@@ -826,11 +829,12 @@ class TestSimBroker(unittest.TestCase):
                     broker._p_manager.positions,
                 )
                 self.assertEqual(broker.balance, 100_200.0)
+                self.assertEqual(broker.equity, broker.balance)
 
     def test_buy_sell_lmt_cover_tp_triggered_on_next_bar(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
             with self.subTest(side, acct_mode=acct_mode):
-                symbol = "SYMBOL2"
+                symbol = "SYMBOL3"
                 data_handler_arg = {"symbol": symbol}
                 broker_args = {"acct_mode": acct_mode}
                 data_handler, broker = self.setup_data_handler_and_broker(
@@ -842,15 +846,52 @@ class TestSimBroker(unittest.TestCase):
                     broker.buy(
                         symbol=symbol,
                         order_type=OrderType.LIMIT,
-                        price=105.60,
-                        tp=107.0,
+                        price=101.0,
+                        tp=105.0,
                     )
                 else:
                     broker.sell(
                         symbol=symbol,
                         order_type=OrderType.LIMIT,
-                        price=107.80,
-                        tp=106.40,
+                        price=103.0,
+                        tp=99.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_400.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_lmt_bracket_sl_triggered_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL1"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.LIMIT,
+                        price=101.0,
+                        sl=100.0,
+                        tp=102.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.LIMIT,
+                        price=103.0,
+                        sl=104.0,
+                        tp=102.0,
                     )
                 data_handler.update_bars()
 
@@ -858,7 +899,118 @@ class TestSimBroker(unittest.TestCase):
                     symbol if acct_mode == "netting" else 1,
                     broker._p_manager.positions,
                 )
-                self.assertEqual(broker.balance, 100_140.0)
+                self.assertEqual(broker.balance, 99_900.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_lmt_bracket_sl_triggered_on_next_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL3"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.LIMIT,
+                        price=101.0,
+                        sl=98.0,
+                        tp=106.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.LIMIT,
+                        price=103.0,
+                        sl=106.0,
+                        tp=98.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 99_700.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_lmt_bracket_tp_triggered_on_same_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL3"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.LIMIT,
+                        price=101.0,
+                        sl=99.0,
+                        tp=104.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.LIMIT,
+                        price=103.0,
+                        sl=105.0,
+                        tp=100.0,
+                    )
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_300.0)
+                self.assertEqual(broker.equity, broker.balance)
+
+    def test_buy_sell_lmt_bracket_tp_triggered_on_next_bar(self):
+        for side, acct_mode in product(OrderSide, ["netting", "hedging"]):
+            with self.subTest(side, acct_mode=acct_mode):
+                symbol = "SYMBOL3"
+                data_handler_arg = {"symbol": symbol}
+                broker_args = {"acct_mode": acct_mode}
+                data_handler, broker = self.setup_data_handler_and_broker(
+                    data_handler_arg, broker_args
+                )
+                data_handler.update_bars()
+
+                if side == OrderSide.BUY:
+                    broker.buy(
+                        symbol=symbol,
+                        order_type=OrderType.LIMIT,
+                        price=101.0,
+                        sl=97.0,
+                        tp=106.0,
+                    )
+                else:
+                    broker.sell(
+                        symbol=symbol,
+                        order_type=OrderType.LIMIT,
+                        price=103.0,
+                        sl=107.0,
+                        tp=98.0,
+                    )
+                data_handler.update_bars()
+                data_handler.update_bars()
+
+                self.assertNotIn(
+                    symbol if acct_mode == "netting" else 1,
+                    broker._p_manager.positions,
+                )
+                self.assertEqual(broker.balance, 100_500.0)
+                self.assertEqual(broker.equity, broker.balance)
 
     def test_buy_sell_stp_order_execution(self):
         for side, acct_mode in product(OrderSide, ["netting", "hedging"]):

@@ -284,14 +284,8 @@ class SimBroker(Broker, EventListener):
                 elif (
                     porder.order_type == OrderType.LIMIT
                     or porder.order_type == OrderType.STOP
-                ):
+                ) and porder.status == OrderStatus.PENDING:
                     self.execute_lmt_stp_order(porder)
-
-                # self.execute_lmt_stp_order(
-                #     order.cover_order
-                #     if isinstance(order, CoverOrder)
-                #     else order.stop_order
-                # )
 
                 if isinstance(order, CoverOrder):
                     self.execute_lmt_stp_order(order.cover_order)

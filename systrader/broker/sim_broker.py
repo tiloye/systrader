@@ -41,7 +41,9 @@ class SimBroker(Broker, EventListener):
     leverage
         The leverage for trading. Default is 1.
     commission
-        The commission for each trade. Default is None.
+        The commission for each trade. Default is 0.0. if between 0 and 1, commission is 
+        assumed to be a percentage of the position size. if greater than 1, then
+        commission is fixed.
     stop_out_level
         The level for closing all positions when their isn't enough maintenance margin.
         Default is 0.2 (20%)
@@ -78,7 +80,7 @@ class SimBroker(Broker, EventListener):
         balance: int | float = 100_000,
         acct_mode: str = "netting",
         leverage: int = 1,
-        commission: float = 0.0,
+        commission: int | float = 0.0,
         stop_out_level: float = 0.2,
         trading_price: str = "close",
     ):
@@ -360,6 +362,7 @@ class SimBroker(Broker, EventListener):
 
         if order.request == "open":  # Order request type
             cost = self.__get_cost(order, price)
+            commission = self._get_commission(order, price)
             if cost < self.free_margin:
                 fill_event = Fill(
                     self.data_handler.timestamp,
@@ -367,7 +370,7 @@ class SimBroker(Broker, EventListener):
                     order.units,
                     order.side,
                     price,
-                    self.commission,
+                    commission,
                     order_id=order.order_id,
                     position_id=order.position_id,
                 )
@@ -403,6 +406,11 @@ class SimBroker(Broker, EventListener):
             return (event.units * price) / self.leverage
         else:
             return (event.units * price) / self.leverage
+        
+    def _get_commission(self, order: Order, price: float) -> float:
+        if self.commission > 1:
+            return self.commission
+        return self.commission * order.units * price
 
     def update(self, event: None = None) -> None:
         """Updates account values when a market event occurs."""

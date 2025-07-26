@@ -1172,6 +1172,38 @@ class TestSimBroker(unittest.TestCase):
 
                 self.assert_bracket_order_execution(broker, 100_300, "tp")
 
+    def test_get_percent_commission(self):
+        symbol = "SYMBOL1"
+        broker = self.create_broker(commission=0.01)  # 1% commission per trade
+        data_handler = self.create_data_handler(symbol)
+        broker.add_data_handler(data_handler)
+        data_handler.update_bars()
+
+        order = broker._order_manager.create_order(
+            symbol=symbol, order_type=OrderType.MARKET, units=100, side=OrderSide.BUY
+        )
+        price = data_handler.get_latest_price(symbol)
+
+        commission = broker._get_commission(order, price)
+
+        self.assertEqual(commission, 102.0)
+
+    def test_get_fixed_commission(self):
+        symbol = "SYMBOL1"
+        broker = self.create_broker(commission=100)  # 1% commission per trade
+        data_handler = self.create_data_handler(symbol)
+        broker.add_data_handler(data_handler)
+        data_handler.update_bars()
+
+        order = broker._order_manager.create_order(
+            symbol=symbol, order_type=OrderType.MARKET, units=100, side=OrderSide.BUY
+        )
+        price = data_handler.get_latest_price(symbol)
+
+        commission = broker._get_commission(order, price)
+
+        self.assertEqual(commission, 100)
+
     def test_account_history_update(self):
         for acct_mode in ["netting", "hedging"]:
             with self.subTest(acct_mode=acct_mode):
